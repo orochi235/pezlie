@@ -2,7 +2,8 @@ import {
   useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode,
 } from 'react';
 import {
-  clientToCanvas, fitViewToBounds, useCanvasSize, useViewAnimation, zoomAt, type View,
+  clientToCanvas, fitViewToBounds, useCanvasSize, useViewAnimation, viewToTransform, worldToScreen,
+  zoomAt, type View,
 } from '@weasel-js/core';
 import { LabShell } from '@weasel-js/labkit';
 import { ToggleBar } from '@weasel-js/ui';
@@ -186,7 +187,10 @@ function WallViewBody<T extends Item>({
   const [opened, setOpened] = useState<string | null>(initial?.opened ?? null);
   // The row as well as the id: finding a row by id means reading every id in
   // the store, which at a million items is a second.
-  const [carded, setCarded] = useState<{ id: string; row: number; at: { x: number; y: number } } | null>(null);
+  // The draw position too: the card frames the cell, and the rect it frames is
+  // recomputed from the position on every camera move.
+  const [carded, setCarded] = useState<
+    { id: string; row: number; position: number; at: { x: number; y: number } } | null>(null);
   const [openedRow, setOpenedRow] = useState<number | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
   const [highlightTag, setHighlightTag] = useState<string | null>(null);
@@ -472,9 +476,29 @@ function WallViewBody<T extends Item>({
     setExplicitCaret(position);
     setOpened(null);
     setOpenedRow(null);
-    setCarded({ id, row, at: { x: size.width / 2, y: size.height / 2 } });
+    setCarded({ id, row, position, at: { x: size.width / 2, y: size.height / 2 } });
     return 'shown';
   }, [facts, laid, size, camAnim]);
+
+  // Where the carded cell is on screen now, not where it was when it was
+  // picked: the frame stays around the cell through a camera glide.
+  const cardCell = useMemo(() => {
+    if (!carded || !cam) return undefined;
+    const rect = rectAt(laid, carded.position);
+    if (!rect) return undefined;
+    const [x, y] = worldToScreen(rect.x, rect.y, viewToTransform(cam));
+    return { x, y, w: rect.w * cam.scale.x, h: rect.h * cam.scale.y };
+  }, [carded, cam, laid]);
+
+  // A clicked cell too small to read glides in until it is one loose tile tall;
+  // one already that big does not move the camera.
+  const glide = (position: number) => {
+    const rect = rectAt(laid, position);
+    const at = camRef.current;
+    if (!rect || !at || size.height <= 0 || rect.h * at.scale.y >= ladder.loose) return;
+    touched.current = true;
+    camAnim.animate(centerReveal(rect, at, size, ladder.loose / size.height));
+  };
 
   return (
     <LabShell title={title} pages={pages} mode={mode}
@@ -533,7 +557,10 @@ function WallViewBody<T extends Item>({
                   tint={selection.tint} gradient={selection.gradient}
                   explicitCaret={explicitCaret} onExplicitCaretChange={setExplicitCaret}
                   onPan={(next) => { touched.current = true; updateCam(next); }}
-                  onPick={(row, at) => setCarded({ id: facts.store.id(row), row, at })}
+                  onPick={(row, at, position) => {
+                    glide(position);
+                    setCarded({ id: facts.store.id(row), row, position, at });
+                  }}
                   onDragStart={() => setCarded(null)}
                   onOpen={(row) => {
                     // With no detail view to show, an open would only hide every card after it.
@@ -557,7 +584,8 @@ function WallViewBody<T extends Item>({
             </p>
           )}
           {cardItem && carded && !(opened && renderDetail) && renderCard && (
-            <ItemCard at={carded.at} viewport={size} onClose={() => setCarded(null)}
+            <ItemCard {...(cardCell ? { cell: cardCell } : { at: carded.at })} viewport={size}
+                      onClose={() => setCarded(null)}
                       onHoverChange={(over) => { overCard.current = over; }}>
               {renderCard(cardItem, drawnSlot, {
                 tint: selection.tint,
