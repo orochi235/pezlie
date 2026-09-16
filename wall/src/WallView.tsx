@@ -15,7 +15,7 @@ import type { DrawOptions } from './draw2d';
 import { ItemCard } from './ItemCard';
 import { gridLayout, rectAt, visibleCount, visiblePositions, type Layout } from './layout';
 import { Legend } from './Legend';
-import { levelFor, LOOSE_LEVEL, pickLevel, SHEET_LEVELS } from './levels';
+import { DEFAULT_LADDER, levelFor, pickLevel, sheetFor, type Ladder } from './levels';
 import { paramSchema, type Params } from './params';
 import { BADGE_MIN_PX, type Appearance } from './paint';
 import { centerReveal } from './reveal';
@@ -180,7 +180,7 @@ function WallViewBody<T extends Item>({
     (s, since) => (s ? fetchItems(s, since) : new Promise(() => {})), [fetchItems]);
   const fetched = useItems(fetchSlot, slot, params.pollMs);
   const loaded = useSheets(urls, slot);
-  const [level, setLevel] = useState(32);
+  const [level, setLevel] = useState(DEFAULT_LADDER.sheets[DEFAULT_LADDER.sheets.length - 1]!);
   const [selection, setSelection] = useState(() => initialSelection(compiled, initial?.selection));
   const [cam, setCam] = useState<View | null>(null);
   const [opened, setOpened] = useState<string | null>(initial?.opened ?? null);
@@ -256,14 +256,16 @@ function WallViewBody<T extends Item>({
   // hand. A new slot's items beside the old slot's sheets would draw every
   // cell stale, so the two travel together.
   const drawn = useRef<{ slot: string; store: ItemStore<T>; sheets: Record<number, Sheet>;
-                         changed: number[] | null } | null>(null);
+                         ladder: Ladder; changed: number[] | null } | null>(null);
   if (fetched.store && fetched.slot === loaded.slot
       && (drawn.current?.store !== fetched.store || drawn.current.sheets !== loaded.sheets)) {
     drawn.current = { slot: fetched.slot, store: fetched.store, sheets: loaded.sheets,
+                      ladder: loaded.ladder,
                       changed: drawn.current?.slot === fetched.slot ? fetched.changed : null };
   }
   const view = drawn.current;
   const sheets = view?.sheets ?? {};
+  const ladder = view?.ladder ?? DEFAULT_LADDER;
   const drawnSlot = view?.slot ?? slot;
   const stale = view !== null && drawnSlot !== slot;
 
@@ -367,19 +369,20 @@ function WallViewBody<T extends Item>({
   useEffect(() => {
     if (!cam) return;
     if (camInitialized.current) {
-      setLevel((current) => pickLevel(current, cellPx,
-                                      params.levelUpHysteresis, params.levelDownHysteresis));
+      setLevel((current) => pickLevel(current, cellPx, params.levelUpHysteresis,
+                                      params.levelDownHysteresis, ladder));
     } else {
       camInitialized.current = true;
-      setLevel(levelFor(cellPx));
+      setLevel(levelFor(cellPx, ladder));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cellPx, size.width, size.height, params.levelUpHysteresis, params.levelDownHysteresis]);
+  }, [cellPx, size.width, size.height, params.levelUpHysteresis, params.levelDownHysteresis,
+      ladder]);
 
   // Only the loose and vector rungs fetch per cell, and by then few are on screen.
   // On-screen cells first, then a margin half a screen wide, fetched ahead.
   const visible = useMemo(() => {
-    if (!cam || !facts || level < LOOSE_LEVEL) return [];
+    if (!cam || !facts || level < ladder.loose) return [];
     const on = visiblePositions(laid, cam, slice, MAX_THUMB_CELLS) ?? [];
     const wide = visiblePositions(laid, cam, {
       x: slice.x - slice.width * THUMB_OVERSCAN, y: slice.y - slice.height * THUMB_OVERSCAN,
@@ -387,24 +390,25 @@ function WallViewBody<T extends Item>({
     }, MAX_THUMB_CELLS) ?? [];
     const seen = new Set(on);
     return [...on, ...wide.filter((p) => !seen.has(p))];
-  }, [laid, cam, slice, level, facts]);
+  }, [laid, cam, slice, level, facts, ladder]);
   const visibleItems = useMemo(
     () => (facts ? visible.map((p) => facts.store.get(laid.order[p]!)) : []),
     [facts, visible, laid]);
   const visibleAt = useMemo(() => visibleItems.map((_, i) => i), [visibleItems]);
   const looseHandle = useRef<LooseHandle | null>(null);
   const vectorHandle = useRef<VectorHandle | null>(null);
-  const loose = useLooseThumbs(visibleItems, visibleAt, level, drawnSlot, urls, looseHandle);
+  const loose = useLooseThumbs(visibleItems, visibleAt, level, drawnSlot, urls, looseHandle,
+                               ladder.loose);
   const vector = useVectorThumbs(visibleItems, visibleAt, level, drawnSlot, urls, cellPx,
                                  vectorHandle);
 
   const gatherCacheReport = async () => {
     const seen = cam && facts ? visiblePositions(laid, cam, slice, MAX_THUMB_CELLS) : null;
     return cacheReport({
-      slot: drawnSlot, cellPx, dpr: window.devicePixelRatio || 1, level,
+      slot: drawnSlot, cellPx, dpr: window.devicePixelRatio || 1, level, ladder,
       cells: { shown: rows.length, visible: cam ? visibleCount(laid, cam, slice) : 0,
                visibleWithSha: (seen ?? []).filter((p) => facts!.store.sha(laid.order[p]!)).length },
-      sheets: SHEET_LEVELS.map((lvl) => {
+      sheets: ladder.sheets.map((lvl) => {
         const sheet = sheets[lvl];
         return { level: lvl, loaded: sheet !== undefined,
                  version: sheet?.manifest.version ?? null,
@@ -417,8 +421,7 @@ function WallViewBody<T extends Item>({
   };
   void targetPxFor;
 
-  // The loose rung still draws from the 32px sheet under a tile not yet in.
-  const active = sheets[level === 8 ? 8 : 32] ?? null;
+  const active = sheets[sheetFor(level, ladder)] ?? null;
 
   const reported = useRef('');
   useEffect(() => {
@@ -546,7 +549,7 @@ function WallViewBody<T extends Item>({
                   })}
                   cssRoot={cssRoot} drawMark={drawMark} washColor={washColor} ground={ground}
                   describe={describe && ((row) => describe(facts.store.get(row)))}
-                  tiled={params.cell * cam.scale.x < BADGE_MIN_PX && level < LOOSE_LEVEL} />
+                  tiled={params.cell * cam.scale.x < BADGE_MIN_PX && level < ladder.loose} />
           )}
           {stale && (
             <p className="wall-stale" role="status">

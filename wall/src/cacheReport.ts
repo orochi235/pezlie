@@ -1,4 +1,4 @@
-import { levelFor, LOOSE_LEVEL, VECTOR_LEVEL } from './levels';
+import { DEFAULT_LADDER, levelFor, VECTOR_LEVEL, type Ladder } from './levels';
 import { PIXEL_BUDGET, residentCap, targetPxFor } from './useVectorThumbs';
 
 /** Why the wall can stop sharpening.
@@ -13,6 +13,8 @@ export interface CacheReportInput {
   dpr: number;
   /** The rung in hand, as `pickLevel` last settled it. */
   level: number;
+  /** The levels the slot was baked at; `DEFAULT_LADDER` when absent. */
+  ladder?: Ladder;
   cells: { shown: number; visible: number; visibleWithSha: number };
   sheets: { level: number; loaded: boolean; version: string | null;
             baked: number }[];
@@ -38,10 +40,8 @@ export interface CacheReport {
   when: string;
   slot: string;
   camera: { cellPx: number; dpr: number; targetPx: number };
-  ladder: {
-    level: number; wants: number; rung: string;
-    looseLevel: number; vectorLevel: number;
-  };
+  /** Rungs by name, since the vector rung is past every number. */
+  ladder: { rung: string; wants: string; sheets: readonly number[]; loose: number };
   cells: { shown: number; visible: number; visibleWithSha: number;
            visibleWithoutSha: number };
   budget: { pixelBudget: number; residentCap: number; starved: boolean };
@@ -51,9 +51,9 @@ export interface CacheReport {
 }
 
 /** The rung a level is on, in the words the code uses for it. */
-export function rungName(level: number): string {
+export function rungName(level: number, ladder: Ladder = DEFAULT_LADDER): string {
   if (level >= VECTOR_LEVEL) return 'vector';
-  if (level >= LOOSE_LEVEL) return 'loose';
+  if (level >= ladder.loose) return 'loose';
   return `sheet-${level}`;
 }
 
@@ -65,8 +65,9 @@ export function findings(input: CacheReportInput,
                          probes: CacheProbe[] = []): string[] {
   const out: string[] = [];
   const { cellPx, dpr, level, cells } = input;
+  const ladder = input.ladder ?? DEFAULT_LADDER;
   const targetPx = targetPxFor(cellPx, dpr);
-  const wants = levelFor(cellPx);
+  const wants = levelFor(cellPx, ladder);
 
   if (cellPx <= 0) {
     return ['the wall has not laid out yet: no camera, so no cell size and '
@@ -75,13 +76,13 @@ export function findings(input: CacheReportInput,
 
   if (wants > level) {
     out.push(`the ladder is behind: ${cellPx.toFixed(0)}px cells want `
-      + `${rungName(wants)} and the wall is holding ${rungName(level)}. `
+      + `${rungName(wants, ladder)} and the wall is holding ${rungName(level, ladder)}. `
       + `Hysteresis keeps a rung until the cell size is half again past its `
       + `band, so this is only wrong if it persists once the camera stops.`);
   }
-  if (level < VECTOR_LEVEL && cellPx > LOOSE_LEVEL) {
+  if (level < VECTOR_LEVEL && cellPx > ladder.loose) {
     out.push(`cells are ${cellPx.toFixed(0)}px but the level is ${level}: `
-      + `above ${LOOSE_LEVEL}px every cell is an upscaled ${LOOSE_LEVEL}px PNG.`);
+      + `above ${ladder.loose}px every cell is an upscaled ${ladder.loose}px PNG.`);
   }
   if (cells.visible > 0 && cells.visibleWithSha === 0) {
     out.push('no visible cell has a sha256, so both upper rungs skip every '
@@ -100,16 +101,16 @@ export function findings(input: CacheReportInput,
     out.push('at the vector rung with nothing rasterized, nothing in flight '
       + 'and nothing queued: the work is not being asked for at all.');
   }
-  if (level >= LOOSE_LEVEL && input.loose.requested > 0
+  if (level >= ladder.loose && input.loose.requested > 0
       && input.loose.loaded === 0) {
     out.push(`${input.loose.requested} loose thumbs were requested and none `
-      + `loaded. The ${LOOSE_LEVEL}px bake is missing for this slot, or its `
+      + `loaded. The ${ladder.loose}px bake is missing for this slot, or its `
       + 'URLs are failing -- an image error here is not reported anywhere else.');
   }
   for (const sheet of input.sheets) {
     if (!sheet.loaded) {
       out.push(`sheet-${sheet.level} never loaded, so cells below `
-        + `${LOOSE_LEVEL}px have no tile to draw: re-bake the slot.`);
+        + `${ladder.loose}px have no tile to draw: re-bake the slot.`);
     } else if (sheet.baked === 0) {
       out.push(`sheet-${sheet.level} loaded with an empty manifest.`);
     }
@@ -133,17 +134,17 @@ export function findings(input: CacheReportInput,
 
 export function cacheReport(input: CacheReportInput): CacheReport {
   const probes = input.probes ?? [];
+  const ladder = input.ladder ?? DEFAULT_LADDER;
   const targetPx = targetPxFor(input.cellPx, input.dpr);
   return {
     when: new Date().toISOString(),
     slot: input.slot,
     camera: { cellPx: input.cellPx, dpr: input.dpr, targetPx },
     ladder: {
-      level: input.level,
-      wants: levelFor(input.cellPx),
-      rung: rungName(input.level),
-      looseLevel: LOOSE_LEVEL,
-      vectorLevel: VECTOR_LEVEL,
+      rung: rungName(input.level, ladder),
+      wants: rungName(levelFor(input.cellPx, ladder), ladder),
+      sheets: ladder.sheets,
+      loose: ladder.loose,
     },
     cells: {
       ...input.cells,

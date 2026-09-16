@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MutableRefObject } from 'react';
-import { LOOSE_LEVEL } from './levels';
+import { DEFAULT_LADDER } from './levels';
 import type { Item } from './schema';
 import { shaVersion } from './urls';
 import type { SlotUrls } from './urls';
@@ -18,8 +18,9 @@ export interface LooseHandle {
 
 export const MAX_IN_FLIGHT = 200;
 
-export function thumbUrl(urls: SlotUrls, item: Item, slot: string): string {
-  return urls.tile(slot, LOOSE_LEVEL, item.id, shaVersion(item.sha));
+export function thumbUrl(urls: SlotUrls, item: Item, slot: string,
+                         loose = DEFAULT_LADDER.loose): string {
+  return urls.tile(slot, loose, item.id, shaVersion(item.sha));
 }
 
 /** Visible items worth a loose fetch: only at the loose rung, only items with
@@ -29,8 +30,9 @@ export function thumbUrl(urls: SlotUrls, item: Item, slot: string): string {
  *  un-fetched item behind the ones in hand, permanently. */
 export function wanted<T extends Item>(items: readonly T[], visible: readonly number[],
                                        level: number,
-                                       have: ReadonlySet<string> = new Set()): T[] {
-  if (level < LOOSE_LEVEL) return [];
+                                       have: ReadonlySet<string> = new Set(),
+                                       loose = DEFAULT_LADDER.loose): T[] {
+  if (level < loose) return [];
   const out: T[] = [];
   for (const i of visible) {
     const item = items[i];
@@ -47,7 +49,8 @@ export function wanted<T extends Item>(items: readonly T[], visible: readonly nu
  *  for the same slot, so a new `visible` array each frame re-issues nothing. */
 export function useLooseThumbs<T extends Item>(items: readonly T[], visible: readonly number[],
                                                level: number, slot: string, urls: SlotUrls,
-                                               handle?: MutableRefObject<LooseHandle | null>):
+                                               handle?: MutableRefObject<LooseHandle | null>,
+                                               looseLevel = DEFAULT_LADDER.loose):
                                                Map<string, HTMLImageElement> {
   const [loose, setLoose] = useState<Map<string, HTMLImageElement>>(new Map());
   const requested = useRef<Set<string>>(new Set());
@@ -62,7 +65,7 @@ export function useLooseThumbs<T extends Item>(items: readonly T[], visible: rea
   useEffect(() => {
     requested.current = new Set();
     setLoose(new Map());
-  }, [slot]);
+  }, [slot, looseLevel]);
 
   useEffect(() => {
     if (!handle) return;
@@ -74,16 +77,16 @@ export function useLooseThumbs<T extends Item>(items: readonly T[], visible: rea
   }, [handle, loose]);
 
   useEffect(() => {
-    for (const item of wanted(items, visible, level, requested.current)) {
+    for (const item of wanted(items, visible, level, requested.current, looseLevel)) {
       requested.current.add(item.id);
       const img = new Image();
       img.onload = () => {
         if (!mounted.current) return;
         setLoose((prev) => new Map(prev).set(item.id, img));
       };
-      img.src = thumbUrl(urls, item, slot);
+      img.src = thumbUrl(urls, item, slot, looseLevel);
     }
-  }, [items, visible, level, slot, urls]);
+  }, [items, visible, level, slot, urls, looseLevel]);
 
   return loose;
 }

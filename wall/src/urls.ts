@@ -1,6 +1,8 @@
 /** Where the wall fetches a slot's pictures. `bakery`'s routes answer
  *  `defaultUrls('/api')`; a host with other paths supplies its own. */
 export interface SlotUrls {
+  /** The levels a slot was baked at. Without it every slot is `DEFAULT_LADDER`. */
+  levels?(slot: string): string;
   /** The JSON manifest beside a sheet. */
   manifest(slot: string, level: number): string;
   /** The sheet image, versioned so a rebake is not served from cache. */
@@ -20,6 +22,7 @@ export function defaultUrls(base = '/api'): SlotUrls {
   const q = encodeURIComponent;
   const v = (version?: string) => (version ? `?v=${q(version)}` : '');
   return {
+    levels: (slot) => `${base}/thumbs/${q(slot)}/levels.json`,
     manifest: (slot, level) => `${base}/thumbs/${q(slot)}/sheet-${level}.json`,
     sheet: (slot, level, version) =>
       `${base}/thumbs/${q(slot)}/sheet-${level}.webp${v(version)}`,

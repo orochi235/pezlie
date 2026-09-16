@@ -15,6 +15,12 @@ it('wants nothing below the loose level', () => {
   expect(wanted([item('a', 0, 'x')], [0], 32)).toEqual([]);
 });
 
+it('fetches at the loose level the slot was baked at', () => {
+  expect(wanted([item('a', 0, 'x')], [0], 128, new Set(), 256)).toEqual([]);
+  expect(thumbUrl(urls, item('a1', 0, 'deadbeefcafe'), 'naive', 256))
+    .toBe('/api/thumbs/naive/256/a1.webp?v=deadbeef');
+});
+
 it('wants only visible items that have a render', () => {
   const items = [item('a', 0, 'x'), item('b', 1, null)];
   expect(wanted(items, [0, 1], 128).map((c) => c.id)).toEqual(['a']);

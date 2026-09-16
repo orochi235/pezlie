@@ -32,8 +32,10 @@ rng = random.Random(13)
 
 
 def files(root):
+    # levels.json is bakery's own addition: the legacy bake writes no ladder.
     return {str(p.relative_to(root)): p.read_bytes()
-            for p in sorted(root.rglob("*")) if p.is_file() and p.name != ".bake.lock"}
+            for p in sorted(root.rglob("*"))
+            if p.is_file() and p.name not in (".bake.lock", "levels.json")}
 
 
 total_items = total_files = total_diff = 0

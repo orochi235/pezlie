@@ -1,5 +1,9 @@
 import { expect, it } from 'vitest';
-import { DEFAULT_HYSTERESIS, levelFor, pickLevel, VECTOR_LEVEL } from '../src/levels';
+import {
+  DEFAULT_HYSTERESIS, DEFAULT_LADDER, levelFor, parseLadder, pickLevel, sheetFor, VECTOR_LEVEL,
+} from '../src/levels';
+
+const WIDE = { sheets: [16, 64], loose: 256 };
 
 it('picks the coarsest level that covers the on-screen cell size', () => {
   expect(levelFor(4)).toBe(8);
@@ -43,4 +47,38 @@ it('honors a caller-supplied hysteresis', () => {
 
 it('defaults to the tuned hysteresis factors', () => {
   expect(DEFAULT_HYSTERESIS).toEqual({ up: 1.5, down: 0.67 });
+});
+
+it('reads its bands off the ladder it is given', () => {
+  expect(levelFor(20, WIDE)).toBe(16);    // a sheet covers up to twice its size
+  expect(levelFor(40, WIDE)).toBe(64);
+  expect(levelFor(200, WIDE)).toBe(256);
+  expect(levelFor(256, WIDE)).toBe(256);
+  expect(levelFor(300, WIDE)).toBe(VECTOR_LEVEL);
+});
+
+it('ends a sheet band at the next level when that comes before twice its size', () => {
+  const close = { sheets: [8, 12], loose: 128 };
+  expect(levelFor(11, close)).toBe(8);
+  expect(levelFor(12, close)).toBe(12);
+});
+
+it('drops a level that is not on the ladder rather than holding it', () => {
+  expect(pickLevel(32, 20, 1.5, 0.67, WIDE)).toBe(16);
+});
+
+it('parses a ladder, and refuses one out of order', () => {
+  expect(parseLadder(WIDE)).toEqual(WIDE);
+  expect(parseLadder({ sheets: [64, 16], loose: 256 })).toBeNull();
+  expect(parseLadder({ sheets: [8, 32], loose: 32 })).toBeNull();
+  expect(parseLadder({ sheets: [], loose: 128 })).toBeNull();
+  expect(parseLadder({ sheets: [8, 32] })).toBeNull();
+  expect(parseLadder('nope')).toBeNull();
+});
+
+it('draws the loose and vector rungs over the finest sheet', () => {
+  expect(sheetFor(8, DEFAULT_LADDER)).toBe(8);
+  expect(sheetFor(32, DEFAULT_LADDER)).toBe(32);
+  expect(sheetFor(128, DEFAULT_LADDER)).toBe(32);
+  expect(sheetFor(VECTOR_LEVEL, WIDE)).toBe(64);
 });

@@ -26,6 +26,9 @@ export const SETTLE_MS = 120;
  *  would show the finished ones. */
 export const CONCURRENCY = 8;
 
+/** The raster size `wantedVector` budgets for when the caller names none. */
+export const VECTOR_TARGET_PX = 512;
+
 export function vectorUrl(urls: SlotUrls, item: Item, slot: string): string {
   return urls.render(slot, item.id, shaVersion(item.sha));
 }
@@ -43,7 +46,7 @@ export function residentCap(targetPx: number): number {
 /** Visible items worth rasterizing: only at the vector rung, only items with
  *  a render, and only as many as the pixel budget holds. */
 export function wantedVector<T extends Item>(items: readonly T[], visible: readonly number[],
-                                             level: number, targetPx = VECTOR_LEVEL): T[] {
+                                             level: number, targetPx = VECTOR_TARGET_PX): T[] {
   if (level < VECTOR_LEVEL) return [];
   const cap = residentCap(targetPx);
   const out: T[] = [];

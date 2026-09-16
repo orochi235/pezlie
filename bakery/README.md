@@ -1,9 +1,10 @@
 # bakery
 
 Bakes one slot's renders into the wall's mip chain, and serves it. A slot is one
-set of renders over the whole corpus; each item gets a 128px loose tile, and
-every item's 8px and 32px tiles are composed onto one sheet per level, with a
-JSON manifest beside each sheet.
+set of renders over the whole corpus; each item gets a loose tile, and its
+smaller tiles are composed onto one sheet per level, with a JSON manifest beside
+each sheet. The levels are 8px and 32px sheets and 128px loose tiles unless the
+host picks others, and `levels.json` beside the sheets tells the wall which.
 
 It knows nothing about what the items are. brick-icons is the first host.
 
@@ -24,6 +25,9 @@ It needs `resvg` on `PATH` for SVG renders. The wall that draws what it bakes is
   is its position in this list, so the host must send the same order to
   `compose` and to the wall's feed, or every sprite lands off by one.
   `compose` refuses a list that repeats an id.
+- **Optionally, the levels** — `Levels(sheets=(16, 64), loose=256)`, passed to
+  `bake_slot`, or to both `bake_item` and `compose`. Sheet levels ascend and the
+  loose level is above them all.
 - **For the routes** — a slot-name-to-directory lookup, a lookup naming the
   render file for an item in a slot, and the root those files must sit under.
 

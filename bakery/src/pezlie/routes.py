@@ -13,6 +13,8 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 
+from pezlie.sheet import LADDER
+
 MEDIA_TYPES = {".svg": "image/svg+xml", ".png": "image/png", ".webp": "image/webp"}
 
 
@@ -36,6 +38,13 @@ def thumbs_router(slot_dir: Callable[[str], Path | None]) -> APIRouter:
         if base is None:
             raise HTTPException(400, f"no such slot: {slot}")
         return base
+
+    @router.get("/{slot}/levels.json")
+    def get_levels(slot: str):
+        path = _slot(slot) / LADDER
+        if not path.is_file():
+            raise HTTPException(404, "no levels.json; the slot was baked before it")
+        return JSONResponse(json.loads(path.read_text()))
 
     @router.get("/{slot}/sheet-{level}.{ext}")
     def get_sheet(slot: str, level: int, ext: str):

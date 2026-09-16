@@ -1,12 +1,13 @@
 import { expect, it, vi } from 'vitest';
 import { cacheReport, findings, probeCell, rungName } from '../src/cacheReport';
 import type { CacheReportInput } from '../src/cacheReport';
+import { VECTOR_LEVEL } from '../src/levels';
 
 const healthy: CacheReportInput = {
   slot: 'outline-second',
   cellPx: 300,
   dpr: 2,
-  level: 512,
+  level: VECTOR_LEVEL,
   cells: { shown: 9000, visible: 20, visibleWithSha: 20 },
   sheets: [{ level: 8, loaded: true, version: 'v1', baked: 9000 },
            { level: 32, loaded: true, version: 'v1', baked: 9000 }],
@@ -25,14 +26,23 @@ it('names the rung in the words the code uses', () => {
   expect(rungName(8)).toBe('sheet-8');
   expect(rungName(32)).toBe('sheet-32');
   expect(rungName(128)).toBe('loose');
-  expect(rungName(512)).toBe('vector');
+  expect(rungName(VECTOR_LEVEL)).toBe('vector');
+  expect(rungName(128, { sheets: [16, 64], loose: 256 })).toBe('sheet-128');
 });
 
 it('catches a wall stuck on upscaled 128px thumbs', () => {
   const report = cacheReport({ ...healthy, level: 128 });
-  expect(report.ladder).toMatchObject({ level: 128, wants: 512, rung: 'loose' });
+  expect(report.ladder).toMatchObject({ rung: 'loose', wants: 'vector', loose: 128 });
   expect(only({ ...healthy, level: 128 }))
     .toContain('every cell is an upscaled 128px PNG');
+});
+
+it('quotes the slot\'s own loose level', () => {
+  const ladder = { sheets: [16, 64], loose: 256 };
+  expect(only({ ...healthy, level: 256, ladder }))
+    .toContain('every cell is an upscaled 256px PNG');
+  expect(cacheReport({ ...healthy, level: 256, ladder }).ladder)
+    .toEqual({ rung: 'loose', wants: 'vector', sheets: [16, 64], loose: 256 });
 });
 
 it('catches a slot whose rows carry no hash', () => {
@@ -53,7 +63,7 @@ it('reports the pixel budget starving a big viewport', () => {
 });
 
 it('does not call the budget starved below the vector rung', () => {
-  // Under 512 nothing is rasterized, so naming the cap sends the reader to
+  // Below the vector rung nothing is rasterized, so naming the cap sends the reader to
   // the wrong rung.
   const report = cacheReport({ ...healthy, level: 32,
     cells: { shown: 9000, visible: 400, visibleWithSha: 400 } });

@@ -14,6 +14,7 @@ def client(tmp_path):
     Image.new("RGBA", (8, 8)).save(slot / "sheet-8.webp", "WEBP")
     (slot / "sheet-8.json").write_text('{"level": 8}')
     (slot / "baked.json").write_text("{}")
+    (slot / "levels.json").write_text('{"sheets": [8], "loose": 128}')
 
     store = tmp_path / "store"
     (store / "naive").mkdir(parents=True)
@@ -48,6 +49,15 @@ def test_a_manifest_carries_its_image_version(client):
     body = client.get("/api/thumbs/naive/sheet-8.json").json()
     assert body["level"] == 8
     assert body["version"].isdigit()
+
+
+def test_a_slot_names_its_levels(client):
+    assert client.get("/api/thumbs/naive/levels.json").json() == {"sheets": [8], "loose": 128}
+
+
+def test_a_slot_baked_before_levels_json_is_404(client, tmp_path):
+    (tmp_path / "thumbs" / "naive" / "levels.json").unlink()
+    assert client.get("/api/thumbs/naive/levels.json").status_code == 404
 
 
 def test_a_missing_manifest_is_404(client):

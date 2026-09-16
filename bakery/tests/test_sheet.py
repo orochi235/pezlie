@@ -3,9 +3,18 @@ import pytest
 from pezlie import sheet
 
 
-def test_levels_are_the_two_sheets_and_the_loose_one():
-    assert sheet.SHEET_LEVELS == (8, 32)
-    assert sheet.LOOSE_LEVEL == 128
+def test_the_default_levels_are_the_two_sheets_and_the_loose_one():
+    assert sheet.DEFAULT_LEVELS.sheets == (8, 32)
+    assert sheet.DEFAULT_LEVELS.loose == 128
+
+
+@pytest.mark.parametrize("bad", [
+    {"sheets": (32, 8)}, {"sheets": (8, 8)}, {"sheets": (8, 32), "loose": 32},
+    {"sheets": ()}, {"sheets": (0, 8)},
+])
+def test_levels_refuse_a_ladder_out_of_order(bad):
+    with pytest.raises(ValueError):
+        sheet.Levels(**bad)
 
 
 def test_the_grid_is_square_enough_to_hold_every_item():
@@ -16,6 +25,14 @@ def test_the_grid_is_square_enough_to_hold_every_item():
 def test_the_coarsest_level_has_no_gutter():
     assert sheet.geometry(100, level=8).gutter == 0
     assert sheet.geometry(100, level=32).gutter == 2
+
+
+def test_geometry_reads_its_sheets_off_the_levels_given():
+    levels = sheet.Levels(sheets=(16, 64), loose=256)
+    assert sheet.geometry(100, level=16, levels=levels).gutter == 0
+    assert sheet.geometry(100, level=64, levels=levels).gutter == 2
+    with pytest.raises(ValueError):
+        sheet.geometry(100, level=8, levels=levels)
 
 
 def test_pitch_is_the_cell_plus_both_gutters():
@@ -39,7 +56,7 @@ def test_an_index_past_the_grid_is_an_error():
 
 def test_the_loose_level_is_not_a_sheet():
     with pytest.raises(ValueError):
-        sheet.geometry(100, level=sheet.LOOSE_LEVEL)
+        sheet.geometry(100, level=sheet.DEFAULT_LEVELS.loose)
 
 
 def test_a_square_sheet_never_crops_an_uneven_grid():

@@ -39,7 +39,9 @@ For the page, `WallView` also takes the item and slot fetchers, a `SlotUrls`
 (`defaultUrls('/api')` matches `bakery`'s routes), groupings, a facet for the
 sidebar, and render props for the card and the detail view. `compact` leaves
 only the wall and its card, for a page embedded somewhere small; `mode` fixes
-light or dark; `paramDefaults` sets what a first visit starts from.
+light or dark; `paramDefaults` sets what a first visit starts from. The wall
+reads each slot's levels from its `levels.json`, and takes a slot without one to
+have 8px and 32px sheets and 128px loose tiles.
 `header` takes controls for the top bar, or a function of `WallHeader` — the
 slots, the current slot, `setSlot` and `reveal(id)` — for a host drawing its
 own slot picker or search; `slotPicker={false}` drops the built-in one.

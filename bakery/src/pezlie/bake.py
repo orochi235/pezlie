@@ -12,7 +12,7 @@ from pathlib import Path
 from PIL import Image
 
 from pezlie.lock import slot_lock
-from pezlie.sheet import GROUND, LEVELS, LOOSE_LEVEL, SHEET_LEVELS, geometry
+from pezlie.sheet import DEFAULT_LEVELS, GROUND, LADDER, Levels, geometry
 from pezlie.sidecar import BAKED, baked_shas, write_json
 
 #: WebP q90 halves sheet-32 against PNG, and the wall fetches it on every open.
@@ -21,49 +21,53 @@ THUMB_SAVE = {"format": "WEBP", "quality": 90, "method": 4}
 
 
 def bake_item(item_id: str, render: Path | str, out: Path | str,
-              sha: str) -> list[int]:
+              sha: str, levels: Levels = DEFAULT_LEVELS) -> list[int]:
     """Rasterize one item at every level. Returns the levels written; an
     unchanged sha writes nothing."""
     out = Path(out)
     with slot_lock(out):
-        return _bake_item(item_id, Path(render), out, sha)
+        return _bake_item(item_id, Path(render), out, sha, levels)
 
 
-def compose(out: Path | str, order: list[str]) -> list[Path]:
-    """Paste every baked tile onto its sheet at its index in `order`.
+def compose(out: Path | str, order: list[str],
+            levels: Levels = DEFAULT_LEVELS) -> list[Path]:
+    """Paste every baked tile onto its sheet at its index in `order`, and
+    write the levels beside the sheets. Pass the levels the tiles were baked at.
 
     `order` is every item, drawn or not: an index is a position in the corpus.
     """
     out = Path(out)
     with slot_lock(out):
-        return _compose(out, order)
+        return _compose(out, order, levels)
 
 
-def _bake_item(item_id: str, render: Path, out: Path, sha: str) -> list[int]:
+def _bake_item(item_id: str, render: Path, out: Path, sha: str,
+               levels: Levels = DEFAULT_LEVELS) -> list[int]:
     shas = baked_shas(out)
     # The sha covers the render, not the encoding: a tile in an old format is a miss.
     if shas.get(item_id) == sha and all(
             (out / str(level) / f"{item_id}.{THUMB_EXT}").is_file()
-            for level in LEVELS):
+            for level in levels.all):
         return []
-    drawn = _drawn(item_id, render, out)
-    for level in LEVELS:
+    drawn = _drawn(item_id, render, out, levels.loose)
+    for level in levels.all:
         path = out / str(level) / f"{item_id}.{THUMB_EXT}"
         path.parent.mkdir(parents=True, exist_ok=True)
         _square(drawn, level).save(path, **THUMB_SAVE)
     write_json(out / BAKED, {**shas, item_id: sha})
-    return list(LEVELS)
+    return list(levels.all)
 
 
-def _compose(out: Path, order: list[str]) -> list[Path]:
+def _compose(out: Path, order: list[str],
+             levels: Levels = DEFAULT_LEVELS) -> list[Path]:
     repeated = [item_id for item_id, n in Counter(order).items() if n > 1]
     if repeated:
         raise ValueError(f"order repeats {len(repeated)} id(s), first {repeated[:3]}: "
                          "every cell after one lands a place off")
     shas = baked_shas(out)
     written = []
-    for level in SHEET_LEVELS:
-        g = geometry(len(order), level)
+    for level in levels.sheets:
+        g = geometry(len(order), level, levels)
         sheet = Image.new("RGBA", (g.size, g.size), (0, 0, 0, 0))
         for index, item_id in enumerate(order):
             tile = out / str(level) / f"{item_id}.{THUMB_EXT}"
@@ -83,11 +87,13 @@ def _compose(out: Path, order: list[str]) -> list[Path]:
             "size": g.size, "baked": shas,
         })
         written.append(path)
+    # Last, so a ladder never names a sheet that is not there yet.
+    write_json(out / LADDER, levels.as_json())
     return written
 
 
-def _drawn(item_id: str, render: Path, out: Path) -> Image.Image:
-    """The render at `LOOSE_LEVEL` wide, as RGBA.
+def _drawn(item_id: str, render: Path, out: Path, width: int) -> Image.Image:
+    """The render at `width` wide, as RGBA.
 
     resvg has no letterbox flag, and passing both -w and -h stretches, so it is
     asked for a width and `_square` pads. A raster render skips resvg, which
@@ -98,7 +104,7 @@ def _drawn(item_id: str, render: Path, out: Path) -> Image.Image:
             return img.convert("RGBA")
     wide = out / f".{item_id}.wide.png"
     proc = subprocess.run(
-        ["resvg", "--width", str(LOOSE_LEVEL), str(render), str(wide)],
+        ["resvg", "--width", str(width), str(render), str(wide)],
         capture_output=True, text=True)
     if proc.returncode != 0 or not wide.is_file():
         raise RuntimeError(f"resvg failed on {item_id}: "

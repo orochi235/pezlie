@@ -4,16 +4,45 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-SHEET_LEVELS = (8, 32)
-LOOSE_LEVEL = 128
 #: The coarsest sheet ends the mip chain, so it cannot bleed and needs no
 #: padding. Every finer sheet does.
 GUTTER = 2
-LEVELS = (*SHEET_LEVELS, LOOSE_LEVEL)
 
 #: The bake owns the ink and the wall owns the ground. A baked ground makes
 #: the zoom rungs disagree, and a cell changes shade on one wheel notch.
 GROUND = (0, 0, 0, 0)
+
+#: Beside a slot's sheets: the levels it was baked at, which the wall reads
+#: rather than assumes.
+LADDER = "levels.json"
+
+
+@dataclass(frozen=True)
+class Levels:
+    """The sizes a slot is baked at: one sprite sheet per `sheets` level, and
+    one file per item at `loose`, which is also the width resvg draws at."""
+    sheets: tuple[int, ...] = (8, 32)
+    loose: int = 128
+
+    def __post_init__(self):
+        object.__setattr__(self, "sheets", tuple(self.sheets))
+        sizes = self.all
+        if not self.sheets:
+            raise ValueError("a ladder needs at least one sheet level")
+        if any(type(n) is not int or n < 1 for n in sizes):
+            raise ValueError(f"levels are positive pixel sizes, not {sizes}")
+        if any(a >= b for a, b in zip(sizes, sizes[1:])):
+            raise ValueError(f"levels ascend, sheets then loose, with no repeats: {sizes}")
+
+    @property
+    def all(self) -> tuple[int, ...]:
+        return (*self.sheets, self.loose)
+
+    def as_json(self) -> dict:
+        return {"sheets": list(self.sheets), "loose": self.loose}
+
+
+DEFAULT_LEVELS = Levels()
 
 
 @dataclass(frozen=True)
@@ -42,11 +71,11 @@ class Geometry:
         return (x, y, x + self.level, y + self.level)
 
 
-def geometry(count: int, level: int) -> Geometry:
-    if level not in SHEET_LEVELS:
-        raise ValueError(f"{level} is not a sheet level; sheets are {SHEET_LEVELS}")
+def geometry(count: int, level: int, levels: Levels = DEFAULT_LEVELS) -> Geometry:
+    if level not in levels.sheets:
+        raise ValueError(f"{level} is not a sheet level; sheets are {levels.sheets}")
     cols = max(1, math.ceil(math.sqrt(count)))
     # cols >= sqrt(count) keeps rows <= cols, so the square sheet never crops.
     rows = max(1, math.ceil(count / cols))
-    gutter = 0 if level == min(SHEET_LEVELS) else GUTTER
+    gutter = 0 if level == levels.sheets[0] else GUTTER
     return Geometry(count=count, level=level, cols=cols, rows=rows, gutter=gutter)

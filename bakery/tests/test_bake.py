@@ -4,7 +4,7 @@ import pytest
 from PIL import Image
 
 from pezlie import bake
-from pezlie.sheet import LEVELS, geometry
+from pezlie.sheet import DEFAULT_LEVELS, LADDER, Levels, geometry
 from pezlie.sidecar import BAKED, baked_shas, write_json
 
 
@@ -70,6 +70,25 @@ def test_the_manifest_names_the_geometry_and_what_is_baked(tmp_path, svg):
     m = json.loads((out / "sheet-32.json").read_text())
     assert (m["level"], m["gutter"], m["pitch"], m["cols"], m["count"]) == (32, 2, 36, 2, 4)
     assert m["baked"] == {"a": "sha-a", "c": "sha-c"}
+    assert json.loads((out / LADDER).read_text()) == {"sheets": [8, 32], "loose": 128}
+
+
+def test_it_bakes_and_composes_at_the_levels_it_is_given(tmp_path, svg):
+    levels = Levels(sheets=(16, 64), loose=256)
+    out = tmp_path / "slot"
+    assert bake.bake_item("a", svg, out, sha="s", levels=levels) == [16, 64, 256]
+    with Image.open(out / "256" / f"a.{bake.THUMB_EXT}") as img:
+        assert img.size == (256, 256)
+    bake.compose(out, order=["a", "b"], levels=levels)
+    assert sorted(p.name for p in out.glob("sheet-*.json")) == ["sheet-16.json", "sheet-64.json"]
+    assert json.loads((out / "sheet-16.json").read_text())["gutter"] == 0
+    assert json.loads((out / LADDER).read_text()) == {"sheets": [16, 64], "loose": 256}
+
+
+def test_a_new_level_rebakes_an_item_whose_sha_is_unchanged(tmp_path, svg):
+    out = tmp_path / "slot"
+    bake.bake_item("a", svg, out, sha="s")
+    assert bake.bake_item("a", svg, out, sha="s", levels=Levels(loose=256)) == [8, 32, 256]
 
 
 def test_an_item_with_no_tile_leaves_its_cell_empty(tmp_path, svg):
@@ -105,12 +124,12 @@ def test_a_sidecar_is_written_whole_or_not_at_all(tmp_path):
 def test_a_format_change_rebakes_rather_than_composing_missing_tiles(
         tmp_path, svg, monkeypatch):
     out = tmp_path / "slot"
-    assert bake.bake_item("3001", svg, out, sha="abc") == list(LEVELS)
+    assert bake.bake_item("3001", svg, out, sha="abc") == list(DEFAULT_LEVELS.all)
     assert bake.bake_item("3001", svg, out, sha="abc") == []
     monkeypatch.setattr(bake, "THUMB_EXT", "png")
     monkeypatch.setattr(bake, "THUMB_SAVE", {"format": "PNG"})
-    assert bake.bake_item("3001", svg, out, sha="abc") == list(LEVELS)
-    for level in LEVELS:
+    assert bake.bake_item("3001", svg, out, sha="abc") == list(DEFAULT_LEVELS.all)
+    for level in DEFAULT_LEVELS.all:
         assert (out / str(level) / "3001.png").is_file()
 
 

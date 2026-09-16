@@ -45,8 +45,10 @@ def _renders(root: Path) -> dict[str, Path]:
 
 
 def _files(root: Path) -> dict[str, bytes]:
+    # levels.json is bakery's own addition: the legacy bake writes no ladder.
     return {str(p.relative_to(root)): p.read_bytes()
-            for p in sorted(root.rglob("*")) if p.is_file() and p.name != ".bake.lock"}
+            for p in sorted(root.rglob("*"))
+            if p.is_file() and p.name not in (".bake.lock", "levels.json")}
 
 
 def test_a_slot_bakes_to_the_same_bytes_as_the_code_it_was_lifted_from(tmp_path):
