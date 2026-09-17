@@ -2,7 +2,7 @@ import { expect, it, vi } from 'vitest';
 import {
   badgeGeometry, CIRCLE_SCALE, cornerBadgesAt, DEFAULT_WASH, drawPaintCommand, type DrawOptions,
 } from '../src/draw2d';
-import type { BadgeArt } from '../src/schema';
+import type { Badge, BadgeArt } from '../src/schema';
 import type { Marks } from '../src/marks';
 import type { PaintCommand } from '../src/paint';
 import type { Palette } from '../src/palette';
@@ -251,7 +251,7 @@ it('sets the strip on the badge row\'s own line and stops it short of the '
                                                     field: '#222288', ink: '#ffffff' }));
   const cell = { dw: 400, dh: 400 };
   const { fall, radius, gap } = badgeGeometry(cell.dw);
-  const run = (badges: { tag: string }[]) => {
+  const run = (badges: Badge[]) => {
     const { ctx, named } = recorder();
     drawPaintCommand(ctx, fill({ ...cell, strip, badges }), null, PALETTE, OPTIONS);
     return named('fillText').filter((c) => c.args[0] === 'B')
