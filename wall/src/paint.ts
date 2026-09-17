@@ -132,7 +132,7 @@ export interface PaintInput<T extends Item> {
   /** What every picture is drawn on. */
   ground?: string;
   /** The drawn cell size badges appear from, for a caller replaying another
-   *  wall's threshold -- brick-icons' legacy painter shows them from 56px.
+   *  wall's threshold -- a host's older painter may show them from 56px.
    *  Deliberately not a `Wall` or `WallView` prop. Defaults to `BADGE_MIN_PX`. */
   badgeMinPx?: number;
 }
