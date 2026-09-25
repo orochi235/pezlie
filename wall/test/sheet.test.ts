@@ -1,5 +1,5 @@
-import { expect, it } from 'vitest';
-import { isStale, sourceBox, staleCount, type SheetManifest } from '../src/sheet';
+import { describe, expect, it } from 'vitest';
+import { isStale, sameLayout, sourceBox, staleCount, type SheetManifest } from '../src/sheet';
 
 const manifest: SheetManifest = {
   level: 32, gutter: 2, pitch: 36, cols: 2, rows: 2, count: 4, size: 72,
@@ -35,4 +35,15 @@ it('counts a tile missing only for an item that has a picture to bake', () => {
 
 it('does not call an item with no picture stale', () => {
   expect(isStale(manifest, { id: 'c', sha: null })).toBe(false);
+});
+
+describe('sameLayout', () => {
+  const m = { level: 32, gutter: 2, pitch: 36, cols: 10, rows: 10, count: 100, size: 360, baked: {} };
+  it('holds for two sheets of one geometry whatever they baked', () => {
+    expect(sameLayout(m, { ...m, baked: { a: 'x' }, version: 'v2' })).toBe(true);
+  });
+  it('fails when a cell would land elsewhere', () => {
+    expect(sameLayout(m, { ...m, count: 101 })).toBe(false);
+    expect(sameLayout(m, { ...m, cols: 9 })).toBe(false);
+  });
 });

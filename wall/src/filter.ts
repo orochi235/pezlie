@@ -5,8 +5,12 @@ export interface ImageFilter {
   /** Names the output: two filters with one key must draw the same pixels.
    *  The cache is keyed on it, so a new key is what re-filters. */
   key: string;
-  /** Draw `src` filtered into `ctx`, a fresh canvas of the source's size. */
-  apply(ctx: CanvasRenderingContext2D, src: CanvasImageSource, w: number, h: number): void;
+  /** Draw `src` filtered into `ctx`, a fresh canvas of the source's size.
+   *  `mask` is the item's companion image from `WallView`'s `maskUrls`,
+   *  scaled to `w` x `h`, or null where it has none; what it means is the
+   *  host's business. */
+  apply(ctx: CanvasRenderingContext2D, src: CanvasImageSource, w: number, h: number,
+        mask: CanvasImageSource | null): void;
 }
 
 function sizeOf(src: CanvasImageSource): { w: number; h: number } {
@@ -17,14 +21,29 @@ function sizeOf(src: CanvasImageSource): { w: number; h: number } {
   return { w: width, h: height };
 }
 
-/** `src` run through `filter`, as a new canvas of the same size. */
-export function applyFilter(src: CanvasImageSource, filter: ImageFilter): HTMLCanvasElement {
-  const { w, h } = sizeOf(src);
+function canvasOf(w: number, h: number): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
+  return canvas;
+}
+
+/** `mask` at `w` x `h`: as it is when it already fits, else redrawn to. */
+function fitted(mask: CanvasImageSource, w: number, h: number): CanvasImageSource {
+  const size = sizeOf(mask);
+  if (size.w === w && size.h === h) return mask;
+  const canvas = canvasOf(w, h);
+  canvas.getContext('2d')?.drawImage(mask, 0, 0, w, h);
+  return canvas;
+}
+
+/** `src` run through `filter`, as a new canvas of the same size. */
+export function applyFilter(src: CanvasImageSource, filter: ImageFilter,
+                            mask: CanvasImageSource | null = null): HTMLCanvasElement {
+  const { w, h } = sizeOf(src);
+  const canvas = canvasOf(w, h);
   const ctx = canvas.getContext('2d');
-  if (ctx && w > 0 && h > 0) filter.apply(ctx, src, w, h);
+  if (ctx && w > 0 && h > 0) filter.apply(ctx, src, w, h, mask && fitted(mask, w, h));
   return canvas;
 }
 
@@ -32,11 +51,11 @@ export function applyFilter(src: CanvasImageSource, filter: ImageFilter): HTMLCa
 export function composeFilters(...filters: ImageFilter[]): ImageFilter {
   return {
     key: filters.map((f) => f.key).join('|'),
-    apply(ctx, src, w, h) {
+    apply(ctx, src, w, h, mask) {
       let current: CanvasImageSource = src;
       filters.forEach((f, i) => {
-        if (i === filters.length - 1) { f.apply(ctx, current, w, h); return; }
-        current = applyFilter(current, f);
+        if (i === filters.length - 1) { f.apply(ctx, current, w, h, mask); return; }
+        current = applyFilter(current, f, mask);
       });
     },
   };
@@ -61,25 +80,32 @@ export function inkFilter(ink: string): ImageFilter {
   };
 }
 
-/** Filters each source once per filter key. Only the latest key is kept per
- *  source, and an entry goes when its source does. */
-export function filterCache(): (src: CanvasImageSource, filter: ImageFilter) => HTMLCanvasElement {
-  const cache = new WeakMap<object, { key: string; canvas: HTMLCanvasElement }>();
-  return (src, filter) => {
+export type FilterImage = (src: CanvasImageSource, filter: ImageFilter,
+                           mask?: CanvasImageSource | null) => HTMLCanvasElement;
+
+/** Filters each source once per filter key and mask. Only the latest pair is
+ *  kept per source, and an entry goes when its source does -- so a mask
+ *  arriving after its drawing re-filters that one drawing. */
+export function filterCache(): FilterImage {
+  const cache = new WeakMap<object, { key: string; mask: CanvasImageSource | null;
+                                      canvas: HTMLCanvasElement }>();
+  return (src, filter, mask = null) => {
     const hit = cache.get(src);
-    if (hit && hit.key === filter.key) return hit.canvas;
-    const canvas = applyFilter(src, filter);
-    cache.set(src, { key: filter.key, canvas });
+    if (hit && hit.key === filter.key && hit.mask === mask) return hit.canvas;
+    const canvas = applyFilter(src, filter, mask);
+    cache.set(src, { key: filter.key, mask, canvas });
     return canvas;
   };
 }
 
-/** `images` with every value filtered, or `images` itself with no filter. */
+/** `images` with every value filtered against its entry in `masks`, or
+ *  `images` itself with no filter. */
 export function filterMap<K>(images: Map<K, CanvasImageSource>, filter: ImageFilter | null | undefined,
-                             filtered: (src: CanvasImageSource, filter: ImageFilter) => HTMLCanvasElement):
+                             filtered: FilterImage,
+                             masks?: ReadonlyMap<K, CanvasImageSource>):
     Map<K, CanvasImageSource> {
   if (!filter) return images;
   const out = new Map<K, CanvasImageSource>();
-  for (const [key, src] of images) out.set(key, filtered(src, filter));
+  for (const [key, src] of images) out.set(key, filtered(src, filter, masks?.get(key) ?? null));
   return out;
 }

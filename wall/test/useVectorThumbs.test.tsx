@@ -115,3 +115,9 @@ it('fetches renders from the urls it is given', async () => {
   renderHook(() => useVectorThumbs(items, visible, VECTOR_LEVEL, 's', custom, 256));
   await waitFor(() => expect(vi.mocked(fetchRender)).toHaveBeenCalledWith('/elsewhere/s/a'));
 });
+
+it('rasterizes only the ids a layer holds when it is told which', () => {
+  const items = [item('a', 'x'), item('b', 'x')];
+  expect(wantedVector(items, [0, 1], VECTOR_LEVEL, 256, new Set(['a'])).map((c) => c.id))
+    .toEqual(['a']);
+});

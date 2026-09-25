@@ -13,6 +13,13 @@ export interface SheetManifest {
   version?: string;
 }
 
+/** Whether two sheets put every cell in the same place, so a pixel of one
+ *  answers for the same pixel of the other. */
+export function sameLayout(a: SheetManifest, b: SheetManifest): boolean {
+  return a.level === b.level && a.gutter === b.gutter && a.pitch === b.pitch
+    && a.cols === b.cols && a.rows === b.rows && a.count === b.count && a.size === b.size;
+}
+
 export interface SourceBox { sx: number; sy: number; sw: number; sh: number }
 
 export function sourceBox(m: SheetManifest, index: number): SourceBox | null {

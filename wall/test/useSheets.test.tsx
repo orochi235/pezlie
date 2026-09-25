@@ -105,3 +105,11 @@ it('keeps the old slot whole until the new one has settled', async () => {
   expect(result.current.slot).toBe('first');
   expect(result.current.sheets).toBe(before);
 });
+
+it('loads nothing for a layer the host does not have', async () => {
+  const asked = serve();
+  const { result } = renderHook(() => useSheets(null, 'first'));
+  await waitFor(() => expect(result.current.slot).toBe('first'));
+  expect(asked).toEqual([]);
+  expect(result.current.sheets).toEqual({});
+});

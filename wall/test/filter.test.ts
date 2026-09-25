@@ -25,8 +25,11 @@ function source(w = 4, h = 4): HTMLCanvasElement {
   return c;
 }
 
-function counting(key: string): ImageFilter & { runs: number } {
-  const f = { key, runs: 0, apply() { f.runs += 1; } };
+function counting(key: string): ImageFilter & { runs: number; masks: (CanvasImageSource | null)[] } {
+  const f = { key, runs: 0, masks: [] as (CanvasImageSource | null)[],
+              apply(_c: unknown, _s: unknown, _w: number, _h: number, mask: CanvasImageSource | null) {
+                f.runs += 1; f.masks.push(mask);
+              } };
   return f;
 }
 
@@ -87,5 +90,39 @@ describe('filterMap', () => {
     const out = filterMap(images, counting('a'), filterCache());
     expect([...out.keys()]).toEqual(['x', 'y']);
     expect(out.get('x')).not.toBe(images.get('x'));
+  });
+});
+
+describe('masks', () => {
+  it('hands a mask of the source size through as it is', () => {
+    const f = counting('a');
+    const mask = source(4, 4);
+    filterCache()(source(4, 4), f, mask);
+    expect(f.masks).toEqual([mask]);
+  });
+
+  it('redraws a mask of another size to the source size', () => {
+    const f = counting('a');
+    filterCache()(source(8, 6), f, source(4, 4));
+    const got = f.masks[0] as HTMLCanvasElement;
+    expect([got.width, got.height]).toEqual([8, 6]);
+  });
+
+  it('re-filters a source when its mask arrives', () => {
+    const cached = filterCache();
+    const f = counting('a');
+    const src = source();
+    const bare = cached(src, f);
+    const withMask = cached(src, f, source());
+    expect(withMask).not.toBe(bare);
+    expect(f.runs).toBe(2);
+  });
+
+  it('pairs each image with its own mask in a map', () => {
+    const f = counting('a');
+    const mx = source();
+    const images = new Map<string, CanvasImageSource>([['x', source()], ['y', source()]]);
+    filterMap(images, f, filterCache(), new Map([['x', mx]]));
+    expect(f.masks).toEqual([mx, null]);
   });
 });

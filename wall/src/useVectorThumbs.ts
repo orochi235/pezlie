@@ -46,13 +46,14 @@ export function residentCap(targetPx: number): number {
 /** Visible items worth rasterizing: only at the vector rung, only items with
  *  a render, and only as many as the pixel budget holds. */
 export function wantedVector<T extends Item>(items: readonly T[], visible: readonly number[],
-                                             level: number, targetPx = VECTOR_TARGET_PX): T[] {
+                                             level: number, targetPx = VECTOR_TARGET_PX,
+                                             only: ReadonlySet<string> | null = null): T[] {
   if (level < VECTOR_LEVEL) return [];
   const cap = residentCap(targetPx);
   const out: T[] = [];
   for (const i of visible) {
     const item = items[i];
-    if (!item || !item.sha) continue;
+    if (!item || !item.sha || (only && !only.has(item.id))) continue;
     out.push(item);
     if (out.length >= cap) break;
   }
@@ -100,11 +101,13 @@ export interface VectorHandle {
  *
  *  A raster is kept only while its cell is wanted, so panning away never
  *  grows this without bound. Work outlives the camera move that asked for it:
- *  canceling on every new `visible` threw away every raster in flight. */
+ *  canceling on every new `visible` threw away every raster in flight. Null
+ *  `urls` loads nothing; `only` limits the work to the ids a layer holds. */
 export function useVectorThumbs<T extends Item>(items: readonly T[], visible: readonly number[],
-                                                level: number, slot: string, urls: SlotUrls,
+                                                level: number, slot: string, urls: SlotUrls | null,
                                                 cellPx: number,
-                                                handle?: MutableRefObject<VectorHandle | null>):
+                                                handle?: MutableRefObject<VectorHandle | null>,
+                                                only: ReadonlySet<string> | null = null):
     Map<string, CanvasImageSource> {
   const [raster, setRaster] = useState<Map<string, RasterEntry>>(new Map());
   const rasterRef = useRef(raster);
@@ -157,7 +160,7 @@ export function useVectorThumbs<T extends Item>(items: readonly T[], visible: re
   useEffect(() => {
     const dpr = window.devicePixelRatio || 1;
     const targetPx = targetPxFor(cellPx, dpr);
-    const want = wantedVector(items, visible, level, targetPx);
+    const want = urls ? wantedVector(items, visible, level, targetPx, only) : [];
     wantedIds.current = new Set(want.map((c) => c.id));
 
     // Residency runs even when nothing new needs fetching, and the byte cache
@@ -212,7 +215,7 @@ export function useVectorThumbs<T extends Item>(items: readonly T[], visible: re
       try {
         let render = bytes.current.get(item.id);
         if (render === undefined) {
-          render = await fetchRender(vectorUrl(urls, item, slot));
+          render = await fetchRender(vectorUrl(urls!, item, slot));
           if (!mounted.current) return;
           bytes.current.set(item.id, render);
         }
@@ -239,7 +242,7 @@ export function useVectorThumbs<T extends Item>(items: readonly T[], visible: re
     if (onSettle.length === 0) return;
     const settle = setTimeout(() => enqueue(onSettle), SETTLE_MS);
     return () => clearTimeout(settle);
-  }, [items, visible, level, slot, urls, cellPx]);
+  }, [items, visible, level, slot, urls, cellPx, only]);
 
   return useMemo(
     () => new Map([...raster].map(([id, entry]) => [id, entry.image])),

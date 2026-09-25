@@ -36,11 +36,13 @@ async function fetchLadder(urls: SlotUrls, slot: string): Promise<Ladder> {
   }
 }
 
-/** `urls` is an effect dependency, so a host passes a stable object. */
-export function useSheets(urls: SlotUrls, slot: string): SheetsState {
+/** `urls` is an effect dependency, so a host passes a stable object. Null
+ *  loads nothing, for a layer the host does not have. */
+export function useSheets(urls: SlotUrls | null, slot: string): SheetsState {
   const [state, setState] = useState<SheetsState>({ sheets: {}, ladder: DEFAULT_LADDER, slot });
 
   useEffect(() => {
+    if (!urls) { setState({ sheets: {}, ladder: DEFAULT_LADDER, slot }); return; }
     let live = true;
     void fetchLadder(urls, slot).then((ladder) => {
       if (!live) return;

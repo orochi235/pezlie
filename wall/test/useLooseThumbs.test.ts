@@ -46,3 +46,9 @@ it('keeps the fields a host added to its items', () => {
   const rich = [{ ...item('a', 0, 'x'), title: 'A' }];
   expect(wanted(rich, [0], 128)[0]!.title).toBe('A');
 });
+
+it('wants only the ids a layer holds when it is told which', () => {
+  const items = [item('a', 0, 'x'), item('b', 1, 'x')];
+  expect(wanted(items, [0, 1], 128, new Set(), 128, new Set(['b'])).map((c) => c.id))
+    .toEqual(['b']);
+});

@@ -31,12 +31,13 @@ export function thumbUrl(urls: SlotUrls, item: Item, slot: string,
 export function wanted<T extends Item>(items: readonly T[], visible: readonly number[],
                                        level: number,
                                        have: ReadonlySet<string> = new Set(),
-                                       loose = DEFAULT_LADDER.loose): T[] {
+                                       loose = DEFAULT_LADDER.loose,
+                                       only: ReadonlySet<string> | null = null): T[] {
   if (level < loose) return [];
   const out: T[] = [];
   for (const i of visible) {
     const item = items[i];
-    if (!item || !item.sha || have.has(item.id)) continue;
+    if (!item || !item.sha || have.has(item.id) || (only && !only.has(item.id))) continue;
     out.push(item);
     if (out.length >= MAX_IN_FLIGHT) break;
   }
@@ -46,11 +47,14 @@ export function wanted<T extends Item>(items: readonly T[], visible: readonly nu
 /** The loose tiles currently loaded, keyed by item id.
  *
  *  An item already requested (loaded or in flight) is never requested again
- *  for the same slot, so a new `visible` array each frame re-issues nothing. */
+ *  for the same slot, so a new `visible` array each frame re-issues nothing.
+ *  Null `urls` loads nothing; `only` limits the fetches to the ids a layer
+ *  actually holds. */
 export function useLooseThumbs<T extends Item>(items: readonly T[], visible: readonly number[],
-                                               level: number, slot: string, urls: SlotUrls,
+                                               level: number, slot: string, urls: SlotUrls | null,
                                                handle?: MutableRefObject<LooseHandle | null>,
-                                               looseLevel = DEFAULT_LADDER.loose):
+                                               looseLevel = DEFAULT_LADDER.loose,
+                                               only: ReadonlySet<string> | null = null):
                                                Map<string, HTMLImageElement> {
   const [loose, setLoose] = useState<Map<string, HTMLImageElement>>(new Map());
   const requested = useRef<Set<string>>(new Set());
@@ -77,7 +81,8 @@ export function useLooseThumbs<T extends Item>(items: readonly T[], visible: rea
   }, [handle, loose]);
 
   useEffect(() => {
-    for (const item of wanted(items, visible, level, requested.current, looseLevel)) {
+    if (!urls) return;
+    for (const item of wanted(items, visible, level, requested.current, looseLevel, only)) {
       requested.current.add(item.id);
       const img = new Image();
       img.onload = () => {
@@ -86,7 +91,7 @@ export function useLooseThumbs<T extends Item>(items: readonly T[], visible: rea
       };
       img.src = thumbUrl(urls, item, slot, looseLevel);
     }
-  }, [items, visible, level, slot, urls, looseLevel]);
+  }, [items, visible, level, slot, urls, looseLevel, only]);
 
   return loose;
 }

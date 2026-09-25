@@ -22,7 +22,7 @@ import { BADGE_MIN_PX, type Appearance } from './paint';
 import { centerReveal } from './reveal';
 import type { CorpusSpec, Item } from './schema';
 import { applySelection } from './select';
-import { staleCountOf } from './sheet';
+import { sameLayout, staleCountOf } from './sheet';
 import type { ItemStore } from './store';
 import { Sidebar, type SidebarSelection } from './Sidebar';
 import { filterCache, filterMap, type ImageFilter } from './filter';
@@ -114,6 +114,11 @@ export interface WallViewProps<T extends Item> {
   /** Run over every image a cell is drawn from; null draws them as fetched.
    *  Keep one object per look -- its `key` is what re-filters. */
   imageFilter?: ImageFilter | null;
+  /** A second image per item, baked with the same layout as the first --
+   *  sheets, loose tiles and renders alike -- and handed to `imageFilter` as
+   *  its mask. Only the items its sheet manifest lists are fetched, and none
+   *  while there is no filter. Pass a stable object. */
+  maskUrls?: SlotUrls;
   describe?: (item: T) => string;
   initial?: { slot?: string; selection?: Partial<SidebarSelection>; opened?: string | null };
   /** Everything a host would put in an address bar, whenever it changes. */
@@ -169,7 +174,7 @@ function initialSelection<T extends Item>(compiled: CompiledSpec<T>,
 function WallViewBody<T extends Item>({
   compiled, title, urls, fetchItems, fetchSlots, defaultSlot, storageKey, cssRoot = '--wall',
   pages, header, slotPicker = true, groupings = [], facet, renderCard, renderDetail, linkedBadges,
-  linkTarget, drawMark, washColor, ground, imageFilter, describe, initial, onChange, compact = false, mode,
+  linkTarget, drawMark, washColor, ground, imageFilter, maskUrls, describe, initial, onChange, compact = false, mode,
   paramDefaults,
 }: WallViewProps<T> & { compiled: CompiledSpec<T> }) {
   const schema = useMemo(() => {
@@ -409,11 +414,21 @@ function WallViewBody<T extends Item>({
                                ladder.loose);
   const vector = useVectorThumbs(visibleItems, visibleAt, level, drawnSlot, urls, cellPx,
                                  vectorHandle);
+  const maskLayer = imageFilter && maskUrls ? maskUrls : null;
+  const masks = useSheets(maskLayer, drawnSlot);
+  const masked = useMemo(() => {
+    const first = Object.values(masks.sheets)[0];
+    return masks.slot === drawnSlot && first ? new Set(Object.keys(first.manifest.baked)) : null;
+  }, [masks, drawnSlot]);
+  const looseMasks = useLooseThumbs(visibleItems, visibleAt, level, drawnSlot,
+                                    masked ? maskLayer : null, undefined, ladder.loose, masked);
+  const vectorMasks = useVectorThumbs(visibleItems, visibleAt, level, drawnSlot,
+                                      masked ? maskLayer : null, cellPx, undefined, masked);
   const filterImage = useMemo(filterCache, []);
-  const shownLoose = useMemo(() => filterMap(loose, imageFilter, filterImage),
-                            [loose, imageFilter, filterImage]);
-  const shownVector = useMemo(() => filterMap(vector, imageFilter, filterImage),
-                             [vector, imageFilter, filterImage]);
+  const shownLoose = useMemo(() => filterMap(loose, imageFilter, filterImage, looseMasks),
+                            [loose, imageFilter, filterImage, looseMasks]);
+  const shownVector = useMemo(() => filterMap(vector, imageFilter, filterImage, vectorMasks),
+                             [vector, imageFilter, filterImage, vectorMasks]);
 
   const gatherCacheReport = async () => {
     const seen = cam && facts ? visiblePositions(laid, cam, slice, MAX_THUMB_CELLS) : null;
@@ -437,8 +452,11 @@ function WallViewBody<T extends Item>({
   const active = sheets[sheetFor(level, ladder)] ?? null;
   const activeImage = useMemo(() => {
     const image = active?.image ?? null;
-    return image && imageFilter ? filterImage(image, imageFilter) : image;
-  }, [active, imageFilter, filterImage]);
+    if (!image || !imageFilter) return image;
+    const mask = masks.slot === drawnSlot && active ? masks.sheets[active.manifest.level] : undefined;
+    return filterImage(image, imageFilter,
+                       mask && sameLayout(mask.manifest, active!.manifest) ? mask.image : null);
+  }, [active, imageFilter, filterImage, masks, drawnSlot]);
 
   const reported = useRef('');
   useEffect(() => {
