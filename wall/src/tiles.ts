@@ -6,7 +6,7 @@ import { rectAt, visiblePositions, visibleSpans, type Laid } from './layout';
 import { GLYPH_MIN_PX, glyphBlend, paintCommands, STALE_WASH, type Appearance } from './paint';
 import type { Palette } from './palette';
 import type { Item } from './schema';
-import type { SheetManifest } from './sheet';
+import type { SheetImage, SheetManifest } from './sheet';
 import { ramp, STATUS, STEPS, tintFor, type RampName } from './tint';
 
 /** A tile's edge in pixels. */
@@ -31,7 +31,7 @@ export interface TileScene<T extends Item> {
   facts: Facts<T>;
   laid: Laid;
   manifest: SheetManifest | null;
-  sheet: HTMLImageElement | null;
+  sheet: SheetImage | null;
   palette: Palette;
   options: DrawOptions;
   highlight: string | null;

@@ -25,6 +25,7 @@ import { applySelection } from './select';
 import { staleCountOf } from './sheet';
 import type { ItemStore } from './store';
 import { Sidebar, type SidebarSelection } from './Sidebar';
+import { filterCache, filterMap, type ImageFilter } from './filter';
 import { STATUS } from './tint';
 import type { SlotUrls } from './urls';
 import { useItems, type FetchItems } from './useItems';
@@ -110,6 +111,9 @@ export interface WallViewProps<T extends Item> {
   drawMark?: DrawOptions['drawMark'];
   washColor?: string;
   ground?: string;
+  /** Run over every image a cell is drawn from; null draws them as fetched.
+   *  Keep one object per look -- its `key` is what re-filters. */
+  imageFilter?: ImageFilter | null;
   describe?: (item: T) => string;
   initial?: { slot?: string; selection?: Partial<SidebarSelection>; opened?: string | null };
   /** Everything a host would put in an address bar, whenever it changes. */
@@ -165,7 +169,7 @@ function initialSelection<T extends Item>(compiled: CompiledSpec<T>,
 function WallViewBody<T extends Item>({
   compiled, title, urls, fetchItems, fetchSlots, defaultSlot, storageKey, cssRoot = '--wall',
   pages, header, slotPicker = true, groupings = [], facet, renderCard, renderDetail, linkedBadges,
-  linkTarget, drawMark, washColor, ground, describe, initial, onChange, compact = false, mode,
+  linkTarget, drawMark, washColor, ground, imageFilter, describe, initial, onChange, compact = false, mode,
   paramDefaults,
 }: WallViewProps<T> & { compiled: CompiledSpec<T> }) {
   const schema = useMemo(() => {
@@ -405,6 +409,11 @@ function WallViewBody<T extends Item>({
                                ladder.loose);
   const vector = useVectorThumbs(visibleItems, visibleAt, level, drawnSlot, urls, cellPx,
                                  vectorHandle);
+  const filterImage = useMemo(filterCache, []);
+  const shownLoose = useMemo(() => filterMap(loose, imageFilter, filterImage),
+                            [loose, imageFilter, filterImage]);
+  const shownVector = useMemo(() => filterMap(vector, imageFilter, filterImage),
+                             [vector, imageFilter, filterImage]);
 
   const gatherCacheReport = async () => {
     const seen = cam && facts ? visiblePositions(laid, cam, slice, MAX_THUMB_CELLS) : null;
@@ -426,6 +435,10 @@ function WallViewBody<T extends Item>({
   void targetPxFor;
 
   const active = sheets[sheetFor(level, ladder)] ?? null;
+  const activeImage = useMemo(() => {
+    const image = active?.image ?? null;
+    return image && imageFilter ? filterImage(image, imageFilter) : image;
+  }, [active, imageFilter, filterImage]);
 
   const reported = useRef('');
   useEffect(() => {
@@ -551,8 +564,8 @@ function WallViewBody<T extends Item>({
           )}
           {cam && facts && (
             <Wall compiled={compiled} facts={facts} laid={laid} cam={cam}
-                  sheet={active?.image ?? null} manifest={active?.manifest ?? null}
-                  loose={loose} vector={vector} width={size.width} height={size.height}
+                  sheet={activeImage} manifest={active?.manifest ?? null}
+                  loose={shownLoose} vector={shownVector} width={size.width} height={size.height}
                   highlight={highlight} highlightTag={highlightTag}
                   tint={selection.tint} gradient={selection.gradient}
                   explicitCaret={explicitCaret} onExplicitCaretChange={setExplicitCaret}

@@ -8,6 +8,7 @@ import {
 } from './draw2d';
 import { glyphBlend, type PaintCommand } from './paint';
 import type { Palette } from './palette';
+import type { SheetImage } from './sheet';
 import { UNSUPPORTED, toDrawCommands, type Sampling } from './toDrawCommands';
 
 export interface Frame { width: number; height: number; dpr: number }
@@ -18,7 +19,7 @@ const IDENTITY: View = { x: 0, y: 0, scale: { x: 1, y: 1 } };
 /** Everything `toDrawCommands` left for canvas2d, for one command. Mirrors
  *  `drawPaintCommand` branch for branch minus the bodies, so each is painted once. */
 export function drawResidue(ctx: CanvasRenderingContext2D, cmd: PaintCommand,
-                            sheet: HTMLImageElement | null, palette: Palette,
+                            sheet: SheetImage | null, palette: Palette,
                             options: DrawOptions) {
   const offset = options.offset ?? { x: 0, y: 0 };
   const dx = cmd.dx + offset.x;
@@ -67,7 +68,7 @@ export function drawResidue(ctx: CanvasRenderingContext2D, cmd: PaintCommand,
  *  Needs no WebGL context, which is what makes it testable. */
 export function paintOverlay(ctx: CanvasRenderingContext2D,
                              cmds: readonly PaintCommand[], frame: Frame,
-                             sheet: HTMLImageElement | null, palette: Palette,
+                             sheet: SheetImage | null, palette: Palette,
                              options: DrawOptions) {
   const { canvas } = ctx;
   const w = Math.round(frame.width * frame.dpr);
@@ -93,7 +94,7 @@ export interface Sheets {
   /** For weasel: the atlas as a texture source. */
   bitmap: ImageBitmap | null;
   /** For the 2D half: the same atlas. */
-  img: HTMLImageElement | null;
+  img: SheetImage | null;
 }
 
 export interface SceneWallPainter {

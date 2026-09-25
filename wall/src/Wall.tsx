@@ -19,7 +19,7 @@ import { defaultPalette, readPalette, type Palette } from './palette';
 import { pinchStep } from './pinch';
 import { centerReveal, panToReveal } from './reveal';
 import type { Item } from './schema';
-import type { SheetManifest } from './sheet';
+import type { SheetImage, SheetManifest } from './sheet';
 import { STATUS, type RampName } from './tint';
 import { offscreenSurface, TileCache } from './tiles';
 import './Wall.css';
@@ -44,7 +44,7 @@ export interface WallProps<T extends Item> {
    *  the caret and every position below index into it. */
   laid: Laid;
   cam: View;
-  sheet: HTMLImageElement | null;
+  sheet: SheetImage | null;
   manifest: SheetManifest | null;
   loose: Map<string, CanvasImageSource>;
   vector: Map<string, CanvasImageSource>;

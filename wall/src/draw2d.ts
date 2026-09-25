@@ -7,6 +7,7 @@ import { THUMB_FACE, drawBadge, drawMarkShapes } from './badgeDraw';
 import type { Marks } from './marks';
 import { glyphBlend, WEIGHT_ID, WEIGHT_TEXT, type Caption, type PaintCommand } from './paint';
 import type { Palette } from './palette';
+import type { SheetImage } from './sheet';
 import type { BadgeArt } from './schema';
 
 export interface DrawOptions {
@@ -251,7 +252,7 @@ export function drawOverlays(ctx: CanvasRenderingContext2D,
 /** One paint command, shifted by `options.offset` -- how a loupe redraws the
  *  same commands recentered in its own canvas. */
 export function drawPaintCommand(ctx: CanvasRenderingContext2D, cmd: PaintCommand,
-                                 sheet: HTMLImageElement | null, palette: Palette,
+                                 sheet: SheetImage | null, palette: Palette,
                                  options: DrawOptions) {
   const offset = options.offset ?? { x: 0, y: 0 };
   const dx = cmd.dx + offset.x;

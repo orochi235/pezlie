@@ -41,3 +41,4 @@ export * from './Sidebar';
 export * from './ItemCard';
 export * from './Wall';
 export * from './WallView';
+export * from './filter';

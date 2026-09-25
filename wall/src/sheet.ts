@@ -74,3 +74,6 @@ export function staleCountOf(m: SheetManifest, count: number,
   }
   return { stale, missing, total: count };
 }
+
+/** A sheet as the painters draw it: the fetched atlas, or a filtered copy. */
+export type SheetImage = HTMLImageElement | HTMLCanvasElement;
