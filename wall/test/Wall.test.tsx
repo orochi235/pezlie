@@ -1,5 +1,5 @@
-import { fireEvent, render } from '@testing-library/react';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { compile } from '../src/cel';
 import { derive } from '../src/derive';
 import { cornerBadgeAt, cornerBadgesAt } from '../src/draw2d';
@@ -24,6 +24,10 @@ beforeEach(() => {
     { left: 0, top: 0, right: 400, bottom: 300, width: 400, height: 300, x: 0, y: 0,
       toJSON() { return {}; } } as DOMRect);
 });
+
+// A wall left mounted keeps its loupe's window key listener, and the first
+// one mounted takes the peek key from every wall after it.
+afterEach(cleanup);
 
 function mount(overrides: Partial<WallProps<Thing>> = {}) {
   const props: WallProps<Thing> = {
@@ -63,6 +67,19 @@ it('zooms about the fingers when two pointers spread apart', () => {
   const next = vi.mocked(w.onPan).mock.lastCall![0];
   expect(next.scale.x).toBeCloseTo(2, 5);
   expect((200 / next.scale.x) + next.x).toBeCloseTo(200, 5);
+});
+
+it('raises the loupe while Alt is held over the wall', async () => {
+  const w = mount();
+  // LoupeBubble draws outside the wall's container.
+  const lens = () => document.querySelector('.lk-loupe__canvas');
+  act(() => {
+    w.canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 10, clientY: 10, bubbles: true }));
+  });
+  act(() => { fireEvent.keyDown(window, { key: 'Alt', altKey: true }); });
+  await waitFor(() => expect(lens()).toBeTruthy());
+  act(() => { fireEvent.keyUp(window, { key: 'Alt' }); });
+  await waitFor(() => expect(lens()).toBeNull());
 });
 
 it('moves an explicit caret with the arrow keys and drops it on Escape', () => {

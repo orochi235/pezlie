@@ -4,10 +4,10 @@ import {
 } from 'react';
 import {
   clientToCanvas, screenToWorld, viewToTransform, worldToScreen, useDecayLoop,
-  viewportDragPanAction, zoomAt,
+  viewportDragPanAction, zoomAt, WeaselProvider,
   type InvocationCtx, type OngoingHandle, type View,
 } from '@weasel-js/core';
-import { LoupeBubble, resolveLoupe, useLoupe } from '@weasel-js/labkit/loupe';
+import { LoupeBubble, LoupeGestures, resolveLoupe, useLoupe } from '@weasel-js/labkit/loupe';
 import { adjacent, impliedCaret, type Direction } from './caret';
 import type { CompiledSpec } from './cel';
 import type { Facts } from './derive';
@@ -485,6 +485,11 @@ export function Wall<T extends Item>({
           }}
         />
       </div>
+      {/* The peek key and the lens' wheel route through a dispatcher, which
+          needs a registry; nothing above the wall is known to provide one. */}
+      <WeaselProvider>
+        <LoupeGestures hostRef={ref} input={loupe.input} peekKey={loupeCapability.peekKey} />
+      </WeaselProvider>
       {loupe.visible && (
         <LoupeBubble aim={loupe.aim} diameter={loupeCapability.diameter}>
           <canvas ref={lensRef} className="lk-loupe__canvas" />
