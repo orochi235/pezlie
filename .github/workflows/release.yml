@@ -1,0 +1,63 @@
+name: Publish the wall to npm
+
+# Publishes wall/ as pezlie when a v* tag is pushed, or from the Actions tab
+# for whatever ref it is run on. npm's trusted publisher for pezlie names this
+# file; renaming it breaks publishing until that setting is changed to match.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: release
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm >= 11.5.1; older falls back to the token
+      # path and fails as ENEEDAUTH.
+      - run: npm install -g npm@12.0.2
+
+      - run: npm ci
+
+      - name: Check the tag names the version being published
+        id: version
+        run: |
+          version=$(node -p "require('./wall/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match wall/package.json $version"
+            exit 1
+          fi
+          if npm view "pezlie@$version" version >/dev/null 2>&1; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::pezlie $version is already on npm; nothing to publish"
+          fi
+
+      # No NPM_TOKEN or NODE_AUTH_TOKEN: npm prefers a token when it finds one,
+      # which skips OIDC and provenance. prepublishOnly typechecks, tests and
+      # builds the wall first.
+      - if: steps.version.outputs.already != 'true'
+        run: npm publish -w wall
+
+      - if: steps.version.outputs.already != 'true'
+        name: Confirm the version reached the registry
+        run: |
+          for i in $(seq 1 30); do
+            npm view "pezlie@${{ steps.version.outputs.version }}" version && exit 0
+            sleep 20
+          done
+          echo "::error::pezlie ${{ steps.version.outputs.version }} is not on npm after 10 minutes"
+          exit 1

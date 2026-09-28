@@ -35,7 +35,8 @@ The root is an npm workspace (`wall`, `hosts/brick-icons`, `hosts/unicode`, `hos
 `npm install` once at the root. `bakery/.venv` and `hosts/unicode/.venv` are
 gitignored and recreated from each README.
 
-**`wall` is published to npm as `pezlie` 0.2.0**, the column rewrite.
+**`wall` is published to npm as `pezlie`** by `.github/workflows/release.yml`, on a pushed `v*`
+tag or by hand from the Actions tab, through npm trusted publishing (OIDC); no npm token is involved.
 **`bakery` 0.2.0 is built but not yet on PyPI**; it uploads with the owner's
 token (`uv publish --token …`). The hosts import the wall's source as `@pezlie/wall/src/*`, through a
 tsconfig path and a vite alias, the specifier brick-icons' lab aliases too.
