@@ -1,6 +1,6 @@
 {
   "name": "pezlie",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "A pan/zoom React canvas over tens of thousands of items, drawn from a baked mip chain of sprites, with a live status color per cell.",
   "license": "MIT",
   "author": "orochi235",
