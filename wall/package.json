@@ -51,9 +51,9 @@
   },
   "dependencies": {
     "@bufbuild/cel": "^0.6.1",
-    "@weasel-js/core": "^1.5.0",
-    "@weasel-js/labkit": "^1.5.0",
-    "@weasel-js/ui": "^1.5.0",
+    "@weasel-js/core": "1.7.0",
+    "@weasel-js/labkit": "1.7.0",
+    "@weasel-js/ui": "1.7.0",
     "apache-arrow": "^21.2.0"
   },
   "devDependencies": {

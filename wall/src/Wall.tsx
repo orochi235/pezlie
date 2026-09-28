@@ -3,7 +3,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent,
 } from 'react';
 import {
-  clientToCanvas, screenToWorld, viewToTransform, worldToScreen, useDecayLoop, usePinchGesture,
+  clientToCanvas, screenToWorld, viewToTransform, worldToScreen, useDecayLoop,
   viewportDragPanAction, zoomAt,
   type InvocationCtx, type OngoingHandle, type View,
 } from '@weasel-js/core';
@@ -16,7 +16,7 @@ import { scenePainter, type SceneWallPainter } from './drawScene';
 import { positionAt, rectAt, visiblePositions, type Laid } from './layout';
 import { DEFAULT_APPEARANCE, DEFAULT_GROUND, paintCommands, type Appearance, type PaintCommand } from './paint';
 import { defaultPalette, readPalette, type Palette } from './palette';
-import { pinchStep } from './pinch';
+import { pinchPair, pinchStep, type Midpoint } from './pinch';
 import { centerReveal, panToReveal } from './reveal';
 import type { Item } from './schema';
 import type { SheetImage, SheetManifest } from './sheet';
@@ -128,7 +128,7 @@ export function Wall<T extends Item>({
   const draggedRef = useRef(false);
   const suppressClickRef = useRef(false);
   const startRef = useRef({ x: 0, y: 0 });
-  const downRef = useRef(new Set<number>());
+  const downRef = useRef(new Map<number, Midpoint>());
   const dragPointerRef = useRef<number | null>(null);
   const pinchAtRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -368,7 +368,7 @@ export function Wall<T extends Item>({
     ({ x: e.clientX - startRef.current.x, y: e.clientY - startRef.current.y });
 
   const onPointerDown = (e: ReactPointerEvent<HTMLCanvasElement>) => {
-    downRef.current.add(e.pointerId);
+    downRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     // A second finger makes it a pinch, which must not fight a pan underneath.
     if (downRef.current.size > 1) { endDrag({ x: 0, y: 0 }, 'cancel'); return; }
     if (e.button !== 0) return;
@@ -382,6 +382,16 @@ export function Wall<T extends Item>({
   };
 
   const onPointerMove = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    const held = downRef.current;
+    if (held.has(e.pointerId)) {
+      const before = pinchPair(held);
+      held.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const after = pinchPair(held);
+      if (before && after && before.spread > 0) {
+        pinch(after.midpoint, after.spread / before.spread);
+        return;
+      }
+    }
     if (!handleRef.current || e.pointerId !== dragPointerRef.current) return;
     const { x: dx, y: dy } = dragDelta(e);
     if (!draggedRef.current) {
@@ -400,7 +410,7 @@ export function Wall<T extends Item>({
     if (e.pointerId === dragPointerRef.current) endDrag(dragDelta(e), reason);
   };
 
-  usePinchGesture(ref, (clientAnchor, factor) => {
+  const pinch = (clientAnchor: Midpoint, factor: number) => {
     const canvas = ref.current;
     if (!canvas) return;
     const [x, y] = clientToCanvas(canvas, clientAnchor.x, clientAnchor.y);
@@ -408,7 +418,7 @@ export function Wall<T extends Item>({
     onPan(pinchStep(camRef.current, { x, y }, pinchAtRef.current, factor));
     pinchAtRef.current = { x, y };
     suppressClickRef.current = true;
-  });
+  };
 
   // Role, name and keyboard operability without a focusable node per cell:
   // arrows move the caret, Enter picks, Escape drops back to the implied one.

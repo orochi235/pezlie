@@ -33,7 +33,7 @@ it('writes a color change through setParam', () => {
   const setParam = vi.fn();
   const { container } = render(panel({ setParam }));
   const swatch = container.querySelector('input[type="color"]')!;
-  fireEvent.change(swatch, { target: { value: '#123456' } });
+  fireEvent.input(swatch, { target: { value: '#123456' } });
   expect(setParam).toHaveBeenCalledWith(expect.any(String), '#123456');
 });
 

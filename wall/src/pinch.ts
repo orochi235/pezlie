@@ -19,3 +19,14 @@ export function pinchStep(view: View, midpoint: Midpoint,
     y: zoomed.y - (midpoint.y - previous.y) / zoomed.scale.y,
   };
 }
+
+/** The first two held pointers by when they went down, as a midpoint and the
+ *  distance between them; null with fewer than two held. */
+export function pinchPair(held: ReadonlyMap<number, Midpoint>):
+  { midpoint: Midpoint; spread: number } | null {
+  const it = held.values();
+  const a = it.next().value;
+  const b = it.next().value;
+  if (!a || !b) return null;
+  return { midpoint: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, spread: Math.hypot(b.x - a.x, b.y - a.y) };
+}

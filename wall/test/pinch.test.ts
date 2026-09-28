@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { viewToTransform, worldToScreen } from '@weasel-js/core';
-import { pinchStep } from '../src/pinch';
+import { pinchPair, pinchStep } from '../src/pinch';
 
 const VIEW = { x: 40, y: 25, scale: { x: 2, y: 2 } };
 
@@ -43,5 +43,16 @@ describe('pinchStep', () => {
     expect(out.scale.x).toBeCloseTo(1);
     const [sx] = screen(out, wx, wy);
     expect(sx).toBeCloseTo(at.x);
+  });
+});
+
+describe('pinchPair', () => {
+  it('measures the first two pointers down and ignores a third', () => {
+    const held = new Map([[7, { x: 0, y: 0 }], [3, { x: 6, y: 8 }], [9, { x: 500, y: 500 }]]);
+    expect(pinchPair(held)).toEqual({ midpoint: { x: 3, y: 4 }, spread: 10 });
+  });
+
+  it('is null with one pointer held', () => {
+    expect(pinchPair(new Map([[1, { x: 0, y: 0 }]]))).toBeNull();
   });
 });

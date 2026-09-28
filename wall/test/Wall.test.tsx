@@ -50,6 +50,21 @@ it('opens the row under a double click', () => {
   expect(w.onOpen).toHaveBeenCalledWith(0);
 });
 
+it('zooms about the fingers when two pointers spread apart', () => {
+  const w = mount();
+  const touch = (type: 'pointerDown' | 'pointerMove', id: number, x: number) =>
+    fireEvent[type](w.canvas, { pointerId: id, clientX: x, clientY: 100, button: 0 });
+  touch('pointerDown', 1, 100);
+  touch('pointerDown', 2, 200);
+  touch('pointerMove', 2, 300);
+  // The spread doubles; a first frame has no earlier midpoint, so it zooms
+  // about the one it ends at and holds the world point under it.
+  expect(w.onPan).toHaveBeenCalledTimes(1);
+  const next = vi.mocked(w.onPan).mock.lastCall![0];
+  expect(next.scale.x).toBeCloseTo(2, 5);
+  expect((200 / next.scale.x) + next.x).toBeCloseTo(200, 5);
+});
+
 it('moves an explicit caret with the arrow keys and drops it on Escape', () => {
   const w = mount({ explicitCaret: 0 });
   fireEvent.keyDown(w.canvas, { key: 'ArrowRight' });
