@@ -18,6 +18,12 @@ export function shaVersion(sha: string | null): string | undefined {
   return sha ? sha.slice(0, 8) : undefined;
 }
 
+/** What names an item's picture in a cache: its id and the sha of its render,
+ *  so a new render is a miss rather than the old picture. */
+export function imageKey(item: { id: string; sha: string | null }): string {
+  return `${item.id}@${item.sha ?? ''}`;
+}
+
 export function defaultUrls(base = '/api'): SlotUrls {
   const q = encodeURIComponent;
   const v = (version?: string) => (version ? `?v=${q(version)}` : '');

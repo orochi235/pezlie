@@ -43,14 +43,23 @@ light or dark; `paramDefaults` sets what a first visit starts from. The wall
 reads each slot's levels from its `levels.json`, and takes a slot without one to
 have 8px and 32px sheets and 128px loose tiles.
 `header` takes controls for the top bar, or a function of `WallHeader` — the
-slots, the current slot, `setSlot` and `reveal(id)` — for a host drawing its
-own slot picker or search; `slotPicker={false}` drops the built-in one.
-`reveal` centers a drawn item and opens its card, and answers `'filtered'` or
-`'absent'` when it cannot.
+slots, the current slot, `setSlot`, `reveal(id)` and `poll()` — for a host
+drawing its own slot picker or search; `slotPicker={false}` drops the built-in
+one. `reveal` centers a drawn item and opens its card, and answers
+`'filtered'` or `'absent'` when it cannot.
 
 `fetchItems` answers with `{ items, version }` — objects, fine for tens of
 thousands — or `{ table, version }`, an Arrow table in index order, which is
-what a million items needs. `bakery`'s `pezlie.feed` writes one.
+what a million items needs. `bakery`'s `pezlie.feed` writes one. Called with a
+`since` version, it answers only what changed; the wall asks every `pollMs`,
+and `poll()` asks now, for a host that hears of a change some other way.
+
+**An item's `sha` names its picture.** When a poll changes an item's `sha`, the
+wall redraws that cell alone: the loose tile and the vector render are fetched
+again, and the cell is drawn into the wall's copy of each sheet from its own
+tile at that level, `SlotUrls.tile(slot, level, id, version)` — which `bakery`
+already writes for every level — rather than fetching the sheets again. The old
+picture stays until the new one lands; a tile that fails keeps it.
 
 ## Rules a spec has to follow
 

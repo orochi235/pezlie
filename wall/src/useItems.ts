@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Table } from 'apache-arrow';
 import type { Item } from './schema';
 import { itemsFromArrow, storeFromArrow, storeFromItems, type ItemStore } from './store';
@@ -36,11 +36,13 @@ export interface ItemsState<T extends Item> {
   changed: number[] | null;
 }
 
-/** `fetchItems` is an effect dependency, so a host passes a stable function. */
+/** `fetchItems` is an effect dependency, so a host passes a stable function.
+ *  `poll` asks the feed for changes now rather than at the next tick. */
 export function useItems<T extends Item>(fetchItems: FetchItems<T>, slot: string,
-                                         pollMs = POLL_MS): ItemsState<T> {
+                                         pollMs = POLL_MS): ItemsState<T> & { poll: () => void } {
   const [state, setState] = useState<ItemsState<T>>({ store: null, slot, changed: null });
   const version = useRef('');
+  const pollNow = useRef<() => void>(() => {});
 
   useEffect(() => {
     let live = true;
@@ -50,7 +52,7 @@ export function useItems<T extends Item>(fetchItems: FetchItems<T>, slot: string
       version.current = body.version;
       setState({ store: storeOf(body), slot, changed: null });
     });
-    const timer = setInterval(() => {
+    const poll = () => {
       void fetchItems(slot, version.current).then((body) => {
         if (!live) return;
         const delta = deltaOf(body);
@@ -62,9 +64,12 @@ export function useItems<T extends Item>(fetchItems: FetchItems<T>, slot: string
           return changed.length > 0 ? { slot, store, changed } : prev;
         });
       });
-    }, pollMs);
-    return () => { live = false; clearInterval(timer); };
+    };
+    pollNow.current = poll;
+    const timer = setInterval(poll, pollMs);
+    return () => { live = false; clearInterval(timer); pollNow.current = () => {}; };
   }, [fetchItems, slot, pollMs]);
 
-  return state;
+  const poll = useCallback(() => pollNow.current(), []);
+  return { ...state, poll };
 }

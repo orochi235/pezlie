@@ -1,6 +1,8 @@
-import { expect, it } from 'vitest';
-import { thumbUrl, wanted } from '../src/useLooseThumbs';
-import { defaultUrls } from '../src/urls';
+// @vitest-environment jsdom
+import { afterEach, expect, it, vi } from 'vitest';
+import { renderHook } from '@testing-library/react';
+import { thumbUrl, useLooseThumbs, wanted } from '../src/useLooseThumbs';
+import { defaultUrls, imageKey } from '../src/urls';
 import type { Item } from '../src/schema';
 
 const item = (id: string, index: number, sha: string | null): Item => ({ id, index, sha });
@@ -36,7 +38,7 @@ it('keeps asking for items behind the cap once the front of the view is in hand'
   // them, for good, since the requested set only grows.
   const many = Array.from({ length: 500 }, (_, i) => item(`c${i}`, i, `sha${i}`));
   const all = many.map((_, i) => i);
-  const have = new Set(many.slice(0, 200).map((c) => c.id));
+  const have = new Set(many.slice(0, 200).map(imageKey));
   const next = wanted(many, all, 128, have);
   expect(next.length).toBe(200);
   expect(next[0]!.id).toBe('c200');
@@ -51,4 +53,26 @@ it('wants only the ids a layer holds when it is told which', () => {
   const items = [item('a', 0, 'x'), item('b', 1, 'x')];
   expect(wanted(items, [0, 1], 128, new Set(), 128, new Set(['b'])).map((c) => c.id))
     .toEqual(['b']);
+});
+
+it('wants an item in hand again once its render moves', () => {
+  const have = new Set([imageKey(item('a', 0, 'old'))]);
+  expect(wanted([item('a', 0, 'old')], [0], 128, have)).toEqual([]);
+  expect(wanted([item('a', 0, 'new')], [0], 128, have).map((c) => c.sha)).toEqual(['new']);
+});
+
+afterEach(() => { vi.unstubAllGlobals(); });
+
+it('refetches only the tile of the item whose sha moved', () => {
+  const asked: string[] = [];
+  vi.stubGlobal('Image', class {
+    onload: (() => void) | null = null;
+    set src(value: string) { asked.push(value); }
+  });
+  const before = [item('a', 0, 'aaaaaaaa1'), item('b', 1, 'bbbbbbbb1')];
+  const { rerender } = renderHook(({ items }) => useLooseThumbs(items, [0, 1], 128, 'naive', urls),
+                                  { initialProps: { items: before } });
+  expect(asked).toHaveLength(2);
+  rerender({ items: [before[0]!, item('b', 1, 'cccccccc2')] });
+  expect(asked.slice(2)).toEqual(['/api/thumbs/naive/128/b.webp?v=cccccccc']);
 });

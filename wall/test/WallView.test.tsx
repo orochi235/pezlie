@@ -171,3 +171,16 @@ it('reveals by row, not by draw position, under a sort', async () => {
   expect(reveal('a')).toBe('shown');
   expect(await screen.findByText('card a')).toBeTruthy();
 });
+
+it('asks the feed for changes since its version when the header polls', async () => {
+  let wall: WallHeader | undefined;
+  const { fetchItems } = mount({
+    defaultSlot: 'north',
+    header: (w) => { wall = w; return <span>polling {w.slot}</span>; },
+  });
+  await screen.findByText('polling north');
+  await waitFor(() => expect(fetchItems).toHaveBeenCalledWith('north', undefined));
+  await act(async () => { await Promise.resolve(); });
+  act(() => wall!.poll());
+  await waitFor(() => expect(fetchItems).toHaveBeenCalledWith('north', 'v1'));
+});

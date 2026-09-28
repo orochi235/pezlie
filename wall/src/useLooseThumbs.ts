@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { MutableRefObject } from 'react';
 import { DEFAULT_LADDER } from './levels';
 import type { Item } from './schema';
-import { shaVersion } from './urls';
+import { imageKey, shaVersion } from './urls';
 import type { SlotUrls } from './urls';
 
 /** Read-and-reset for this rung, for a cache report.
@@ -26,7 +26,8 @@ export function thumbUrl(urls: SlotUrls, item: Item, slot: string,
 /** Visible items worth a loose fetch: only at the loose rung, only items with
  *  a render, and capped so a big viewport never fires hundreds at once.
  *
- *  `have` is skipped BEFORE the cap. Counting it toward the cap starved every
+ *  `have` holds `imageKey`s, so an item whose sha moved is wanted again. It
+ *  is skipped BEFORE the cap. Counting it toward the cap starved every
  *  un-fetched item behind the ones in hand, permanently. */
 export function wanted<T extends Item>(items: readonly T[], visible: readonly number[],
                                        level: number,
@@ -37,7 +38,7 @@ export function wanted<T extends Item>(items: readonly T[], visible: readonly nu
   const out: T[] = [];
   for (const i of visible) {
     const item = items[i];
-    if (!item || !item.sha || have.has(item.id) || (only && !only.has(item.id))) continue;
+    if (!item || !item.sha || have.has(imageKey(item)) || (only && !only.has(item.id))) continue;
     out.push(item);
     if (out.length >= MAX_IN_FLIGHT) break;
   }
@@ -46,8 +47,10 @@ export function wanted<T extends Item>(items: readonly T[], visible: readonly nu
 
 /** The loose tiles currently loaded, keyed by item id.
  *
- *  An item already requested (loaded or in flight) is never requested again
- *  for the same slot, so a new `visible` array each frame re-issues nothing.
+ *  An item already requested (loaded or in flight) at its current sha is never
+ *  requested again for the same slot, so a new `visible` array each frame
+ *  re-issues nothing. A new sha fetches the new tile, and the old one stays
+ *  on screen until it lands.
  *  Null `urls` loads nothing; `only` limits the fetches to the ids a layer
  *  actually holds. */
 export function useLooseThumbs<T extends Item>(items: readonly T[], visible: readonly number[],
@@ -58,6 +61,8 @@ export function useLooseThumbs<T extends Item>(items: readonly T[], visible: rea
                                                Map<string, HTMLImageElement> {
   const [loose, setLoose] = useState<Map<string, HTMLImageElement>>(new Map());
   const requested = useRef<Set<string>>(new Set());
+  // The newest key asked for per id: an older render landing late is dropped.
+  const latest = useRef<Map<string, string>>(new Map());
   // Only unmounting stops an image landing. Keyed to the effect instead, an
   // image finishing after the next camera move was dropped and never re-asked.
   const mounted = useRef(true);
@@ -68,6 +73,7 @@ export function useLooseThumbs<T extends Item>(items: readonly T[], visible: rea
 
   useEffect(() => {
     requested.current = new Set();
+    latest.current = new Map();
     setLoose(new Map());
   }, [slot, looseLevel]);
 
@@ -75,7 +81,7 @@ export function useLooseThumbs<T extends Item>(items: readonly T[], visible: rea
     if (!handle) return;
     handle.current = {
       stats: () => ({ loaded: loose.size, requested: requested.current.size }),
-      reset: () => { requested.current = new Set(); setLoose(new Map()); },
+      reset: () => { requested.current = new Set(); latest.current = new Map(); setLoose(new Map()); },
     };
     return () => { handle.current = null; };
   }, [handle, loose]);
@@ -83,10 +89,12 @@ export function useLooseThumbs<T extends Item>(items: readonly T[], visible: rea
   useEffect(() => {
     if (!urls) return;
     for (const item of wanted(items, visible, level, requested.current, looseLevel, only)) {
-      requested.current.add(item.id);
+      const key = imageKey(item);
+      requested.current.add(key);
+      latest.current.set(item.id, key);
       const img = new Image();
       img.onload = () => {
-        if (!mounted.current) return;
+        if (!mounted.current || latest.current.get(item.id) !== key) return;
         setLoose((prev) => new Map(prev).set(item.id, img));
       };
       img.src = thumbUrl(urls, item, slot, looseLevel);

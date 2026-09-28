@@ -6,7 +6,7 @@ import {
   useVectorThumbs, vectorUrl, wantedVector,
 } from '../src/useVectorThumbs';
 import { VECTOR_LEVEL } from '../src/levels';
-import { defaultUrls } from '../src/urls';
+import { defaultUrls, imageKey } from '../src/urls';
 import type { Item } from '../src/schema';
 
 vi.mock('../src/svgRaster', () => ({
@@ -120,4 +120,12 @@ it('rasterizes only the ids a layer holds when it is told which', () => {
   const items = [item('a', 'x'), item('b', 'x')];
   expect(wantedVector(items, [0, 1], VECTOR_LEVEL, 256, new Set(['a'])).map((c) => c.id))
     .toEqual(['a']);
+});
+
+it('rasterizes a cell again at once when its render has moved', () => {
+  const cell = { id: 'a', index: 0, sha: 'new' };
+  const have = new Map([['a', { px: 512, key: imageKey({ id: 'a', sha: 'old' }) }]]);
+  expect(splitWork([cell], have, 512).now).toEqual([cell]);
+  have.set('a', { px: 512, key: imageKey(cell) });
+  expect(splitWork([cell], have, 512)).toEqual({ now: [], onSettle: [] });
 });

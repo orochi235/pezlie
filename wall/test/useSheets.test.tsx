@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
-import { useSheets } from '../src/useSheets';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { movedRenders, useSheets } from '../src/useSheets';
 import { DEFAULT_LADDER } from '../src/levels';
 import { defaultUrls } from '../src/urls';
 import type { SheetManifest } from '../src/sheet';
@@ -112,4 +112,41 @@ it('loads nothing for a layer the host does not have', async () => {
   await waitFor(() => expect(result.current.slot).toBe('first'));
   expect(asked).toEqual([]);
   expect(result.current.sheets).toEqual({});
+});
+
+it('redraws a moved cell from its own tiles, not by fetching the sheets again', async () => {
+  const asked = serve();
+  const drawn: unknown[][] = [];
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+    imageSmoothingEnabled: true,
+    clearRect: () => {},
+    drawImage: (...args: unknown[]) => { drawn.push(args); },
+  } as unknown as CanvasRenderingContext2D);
+  const { result } = renderHook(() => useSheets(urls, 'first'));
+  await waitFor(() => expect(Object.keys(result.current.sheets)).toHaveLength(SHEET_LEVELS.length));
+  const fetchedBefore = asked.length;
+  loaded.length = 0;
+
+  act(() => { result.current.refresh([{ id: 'b', index: 5, sha: 'feedface99' }]); });
+  await waitFor(() => {
+    for (const l of SHEET_LEVELS) expect(result.current.sheets[l]!.manifest.baked.b).toBe('feedface99');
+  });
+  expect(asked).toHaveLength(fetchedBefore);
+  expect(loaded.sort()).toEqual(SHEET_LEVELS.map((l) => `/api/thumbs/first/${l}/b.webp?v=feedface`).sort());
+  const sheet = result.current.sheets[SHEET_LEVELS[0]!]!;
+  expect(sheet.image).toBeInstanceOf(HTMLCanvasElement);
+  expect(sheet.manifest.baked.a).toBe('x');
+  // Cell 5 of a 4-wide grid is column 1, row 1: one pitch in, past the gutter.
+  const at = SHEET_LEVELS[0]! + 2 + 1;
+  expect(drawn).toContainEqual([expect.anything(), 0, 0, SHEET_LEVELS[0], SHEET_LEVELS[0],
+                                at, at, SHEET_LEVELS[0], SHEET_LEVELS[0]]);
+});
+
+it('names only the changed rows whose render moved', () => {
+  const store = (shas: (string | null)[]) => ({
+    id: (r: number) => `i${r}`, index: (r: number) => r, sha: (r: number) => shas[r]!,
+  });
+  const before = store(['s0', 's1', 's2', 's3']);
+  const after = store(['s0', 'moved', null, 's3']);
+  expect(movedRenders(before, after, [0, 1, 2])).toEqual([{ id: 'i1', index: 1, sha: 'moved' }]);
 });

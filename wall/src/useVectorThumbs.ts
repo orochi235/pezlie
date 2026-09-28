@@ -3,7 +3,7 @@ import type { MutableRefObject } from 'react';
 import { fetchRender, rasterize } from './svgRaster';
 import { VECTOR_LEVEL } from './levels';
 import type { Item } from './schema';
-import { shaVersion } from './urls';
+import { imageKey, shaVersion } from './urls';
 import type { SlotUrls } from './urls';
 
 /** Rasterized area kept resident, in device pixels (~190MB of RGBA). A count
@@ -71,20 +71,22 @@ export function needsRerender(cachedPx: number | null, targetPx: number,
  *
  *  A cell with no raster is showing a blurry loose tile, so it is drawn at
  *  whatever size the camera is passing through. Redoing merely-wrong-sized
- *  rasters mid-gesture spends the budget on sizes the camera has left. */
-export function splitWork<T extends Item>(want: readonly T[], have: Map<string, { px: number }>,
+ *  rasters mid-gesture spends the budget on sizes the camera has left. A
+ *  raster of an older render is as good as none. */
+export function splitWork<T extends Item>(want: readonly T[],
+                                          have: Map<string, { px: number; key?: string }>,
                                           targetPx: number): { now: T[]; onSettle: T[] } {
   const now: T[] = [];
   const onSettle: T[] = [];
   for (const item of want) {
     const cached = have.get(item.id);
-    if (!cached) now.push(item);
+    if (!cached || (cached.key !== undefined && cached.key !== imageKey(item))) now.push(item);
     else if (needsRerender(cached.px, targetPx)) onSettle.push(item);
   }
   return { now, onSettle };
 }
 
-interface RasterEntry { image: CanvasImageSource; px: number }
+interface RasterEntry { image: CanvasImageSource; px: number; key: string }
 
 /** Read-and-reset for this rung, for a cache report.
  *
@@ -97,7 +99,8 @@ export interface VectorHandle {
   reset(): void;
 }
 
-/** The vector rung's rasterized cells, keyed by item id.
+/** The vector rung's rasterized cells, keyed by item id. A new sha rerasters
+ *  the cell; the old raster stays on screen until the new one lands.
  *
  *  A raster is kept only while its cell is wanted, so panning away never
  *  grows this without bound. Work outlives the camera move that asked for it:
@@ -118,6 +121,9 @@ export function useVectorThumbs<T extends Item>(items: readonly T[], visible: re
   const queue = useRef<{ item: T; px: number }[]>([]);
   const running = useRef(0);
   const wantedIds = useRef<Set<string>>(new Set());
+  // `imageKey`s of the wanted items: what the render bytes and arrivals are
+  // checked against, so an old render never lands over a new one.
+  const wantedKeys = useRef<Set<string>>(new Set());
   const bytes = useRef<Map<string, Blob>>(new Map());
   // Arrivals merge once a frame: one state update per screenful.
   const arrived = useRef<Map<string, RasterEntry>>(new Map());
@@ -162,6 +168,7 @@ export function useVectorThumbs<T extends Item>(items: readonly T[], visible: re
     const targetPx = targetPxFor(cellPx, dpr);
     const want = urls ? wantedVector(items, visible, level, targetPx, only) : [];
     wantedIds.current = new Set(want.map((c) => c.id));
+    wantedKeys.current = new Set(want.map(imageKey));
 
     // Residency runs even when nothing new needs fetching, and the byte cache
     // follows the rasters out.
@@ -173,8 +180,8 @@ export function useVectorThumbs<T extends Item>(items: readonly T[], visible: re
       }
       return changed ? next : prev;
     });
-    for (const id of bytes.current.keys()) {
-      if (!wantedIds.current.has(id)) bytes.current.delete(id);
+    for (const key of bytes.current.keys()) {
+      if (!wantedKeys.current.has(key)) bytes.current.delete(key);
     }
 
     const scheduleFlush = () => {
@@ -187,7 +194,7 @@ export function useVectorThumbs<T extends Item>(items: readonly T[], visible: re
         setRaster((prev) => {
           const next = new Map(prev);
           for (const [id, entry] of batch) {
-            if (wantedIds.current.has(id)) next.set(id, entry);
+            if (wantedKeys.current.has(entry.key)) next.set(id, entry);
           }
           return next;
         });
@@ -197,15 +204,16 @@ export function useVectorThumbs<T extends Item>(items: readonly T[], visible: re
     const drain = () => {
       while (running.current < CONCURRENCY && queue.current.length > 0) {
         const job = queue.current.shift()!;
-        if (!wantedIds.current.has(job.item.id)) {
-          inFlight.current.delete(job.item.id);
+        const key = imageKey(job.item);
+        if (!wantedKeys.current.has(key)) {
+          inFlight.current.delete(key);
           continue;
         }
         running.current += 1;
         void rasterOne(job.item, job.px)
           .finally(() => {
             running.current -= 1;
-            inFlight.current.delete(job.item.id);
+            inFlight.current.delete(key);
             drain();
           });
       }
@@ -213,15 +221,16 @@ export function useVectorThumbs<T extends Item>(items: readonly T[], visible: re
 
     const rasterOne = async (item: T, px: number) => {
       try {
-        let render = bytes.current.get(item.id);
+        const key = imageKey(item);
+        let render = bytes.current.get(key);
         if (render === undefined) {
           render = await fetchRender(vectorUrl(urls!, item, slot));
           if (!mounted.current) return;
-          bytes.current.set(item.id, render);
+          bytes.current.set(key, render);
         }
         const image = await rasterize(render, px, px);
-        if (!mounted.current || !wantedIds.current.has(item.id)) return;
-        arrived.current.set(item.id, { image, px });
+        if (!mounted.current || !wantedKeys.current.has(key)) return;
+        arrived.current.set(item.id, { image, px, key });
         scheduleFlush();
       } catch {
         /* the loose tile stays the fallback */
@@ -230,8 +239,9 @@ export function useVectorThumbs<T extends Item>(items: readonly T[], visible: re
 
     const enqueue = (batch: T[]) => {
       for (const item of batch) {
-        if (inFlight.current.has(item.id)) continue;
-        inFlight.current.add(item.id);
+        const key = imageKey(item);
+        if (inFlight.current.has(key)) continue;
+        inFlight.current.add(key);
         queue.current.push({ item, px: targetPx });
       }
       drain();

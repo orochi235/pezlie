@@ -31,7 +31,7 @@ import type { SlotUrls } from './urls';
 import { useItems, type FetchItems } from './useItems';
 import { useLooseThumbs, type LooseHandle } from './useLooseThumbs';
 import { useParams } from './useParams';
-import { useSheets, type Sheet } from './useSheets';
+import { movedRenders, useSheets, type Sheet } from './useSheets';
 import { targetPxFor, useVectorThumbs, type VectorHandle } from './useVectorThumbs';
 import { useVisualViewport } from './useVisualViewport';
 import { Wall } from './Wall';
@@ -81,6 +81,9 @@ export interface WallHeader {
   slot: string;
   setSlot: (slot: string) => void;
   reveal: (id: string) => RevealResult;
+  /** Ask the feed for changes now instead of at the next poll. A cell whose
+   *  `sha` moved redraws its picture on every rung. */
+  poll: () => void;
 }
 
 export interface WallViewProps<T extends Item> {
@@ -419,6 +422,21 @@ function WallViewBody<T extends Item>({
                                  vectorHandle);
   const maskLayer = imageFilter && maskUrls ? maskUrls : null;
   const masks = useSheets(maskLayer, drawnSlot);
+  // A poll's rows whose sha moved redraw their cells on the sheets; the loose
+  // and vector rungs refetch on their own, since they key on the sha.
+  const polledFrom = useRef<{ slot: string; store: ItemStore<T> } | null>(null);
+  const { refresh: refreshSheets } = loaded;
+  const { refresh: refreshMasks } = masks;
+  useEffect(() => {
+    const before = polledFrom.current;
+    if (!fetched.store) return;
+    polledFrom.current = { slot: fetched.slot, store: fetched.store };
+    if (!before || before.slot !== fetched.slot || before.store === fetched.store
+        || !fetched.changed) return;
+    const cells = movedRenders(before.store, fetched.store, fetched.changed);
+    refreshSheets(cells);
+    refreshMasks(cells);
+  }, [fetched.store, fetched.slot, fetched.changed, refreshSheets, refreshMasks]);
   const masked = useMemo(() => {
     const first = Object.values(masks.sheets)[0];
     return masks.slot === drawnSlot && first ? new Set(Object.keys(first.manifest.baked)) : null;
@@ -552,7 +570,7 @@ function WallViewBody<T extends Item>({
                     </label>
                   )}
                   {typeof header === 'function'
-                    ? header({ slots, slot, setSlot: chooseSlot, reveal }) : header}
+                    ? header({ slots, slot, setSlot: chooseSlot, reveal, poll: fetched.poll }) : header}
                   <ToggleBar mode="multiple" size="sm" variant="minimal" ariaLabel="Panels"
                              className="wall-panels"
                              items={[{ value: 'legend', label: 'Legend' }]}
