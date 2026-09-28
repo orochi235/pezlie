@@ -115,7 +115,6 @@ npx tsc --noEmit
 ```
 
 `test/leak.test.ts` fails if a host's vocabulary appears anywhere in the
-package. `hosts/brick-icons/` proves brick-icons' spec draws what brick-icons
-drew; `hosts/unicode/` is a working page over every Unicode code point, and its
+package. `hosts/unicode/` is a working page over every Unicode code point, and its
 `bench/` measures the wall at a million items; `hosts/emoji/` is the compact
 wall the portfolio embeds.

@@ -53,7 +53,7 @@ buffers; it never builds an object per item.
 - **JS:** `apache-arrow` (21.2.0) decodes it.
 - **Small hosts keep objects.** `storeFromItems(items)` builds the same column
   store from `T[]`, so a host with tens of thousands of items can go on sending
-  JSON. brick-icons' parity tests use this path.
+  JSON.
 - **Poll deltas** arrive as a table of changed rows and are applied by `index`.
   A delta drops every cached sort order, tint and caption, and the tiles.
 
@@ -74,7 +74,7 @@ ungroupable.
 expression once per distinct group, writing the result to every row in it. For
 Unicode the states read only `kind` and the general category, so they cost a few dozen evaluations. An
 ungroupable expression, or one whose fields have nearly as many distinct values
-as rows (brick-icons' `item.secs > 60`), runs once per row on the main thread;
+as rows (`item.secs > 60`), runs once per row on the main thread;
 nothing measured has needed a worker. A value that is nothing but a field read
 (`item.cp`) runs no CEL at all and takes the column as it stands.
 
@@ -92,9 +92,7 @@ Each sort key's order is computed the first time that sort is used and cached
 as a `Uint32Array` of rows. The key's distinct values are ranked -- numbers
 through a typed-array sort, or not at all when the column already rises;
 strings by one flat natural key each, compared as plain strings -- and rows are
-counting-sorted by rank. Ties break by `index`, where they broke by natural id
-order; brick-icons' test cells are now numbered in id order, which is how a
-feed composes them, and its parity tests pass.
+counting-sorted by rank. Ties break by `index`.
 
 A filter, class, facet or tag change is then one linear pass over the cached
 order, writing the rows it keeps into a new `Uint32Array`.
@@ -109,6 +107,10 @@ the blocks that intersect the viewport, then the cell range inside each.
 
 Grouping keys become projections (CEL, or a hook with `reads`), so grouping
 uses the same value-grouped evaluation as everything else.
+
+`blockLayout` and `bandedLayout` are generic over the item type, so a key
+function handed to one needs its parameter typed; it cannot be inferred from the
+items passed later.
 
 ### Drawing: a tile pyramid built in the browser
 
@@ -162,13 +164,6 @@ for that one row.
   frame times over a scripted pan and zoom with the whole wall on screen; and
   the time from a filter or sort click to the next complete frame. It prints
   each against its gate and exits nonzero on a miss.
-
-### brick-icons
-
-brick-icons pins pezlie by sha, so it sees none of this until it moves the pin.
-Before this merges, `hosts/brick-icons`' goldens and differential tests pass on
-the new path through `columnsFromItems`, with its hooks given `reads`. Moving
-its feed to Arrow is its own later change.
 
 ## Measured
 

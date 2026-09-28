@@ -12,8 +12,8 @@ click. Two packages:
   atlases, and serve them. **Built.**
 
 A host supplies a corpus and a schema describing it; the wall draws it.
-`brick-icons` is the first host, with 24,591 LEGO parts; `hosts/unicode` draws
-all 1,114,112 code points.
+`hosts/unicode` draws all 1,114,112 code points; `hosts/emoji` draws all 3,944
+emoji.
 
 The design, and what is built of it, is
 [`docs/superpowers/specs/2026-09-07-abstract-wall-design.md`](docs/superpowers/specs/2026-09-07-abstract-wall-design.md);

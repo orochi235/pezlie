@@ -6,7 +6,7 @@ smaller tiles are composed onto one sheet per level, with a JSON manifest beside
 each sheet. The levels are 8px and 32px sheets and 128px loose tiles unless the
 host picks others, and `levels.json` beside the sheets tells the wall which.
 
-It knows nothing about what the items are. brick-icons is the first host.
+It knows nothing about what the items are.
 
 ```bash
 pip install pezlie
@@ -59,8 +59,3 @@ uv venv bakery/.venv --python 3.14
 uv pip install --python bakery/.venv/bin/python -e 'bakery[test]'
 bakery/.venv/bin/python -m pytest bakery -q
 ```
-
-`tests/test_parity.py` bakes the same inputs through brick-icons'
-`brick_icons/thumbs.py` and through this package and compares bytes. It looks
-for a brick-icons checkout beside pezlie, or at `$BRICK_ICONS`, and skips
-without one.

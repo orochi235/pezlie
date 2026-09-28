@@ -3,7 +3,6 @@
   "private": true,
   "workspaces": [
     "wall",
-    "hosts/brick-icons",
     "hosts/unicode",
     "hosts/emoji"
   ],

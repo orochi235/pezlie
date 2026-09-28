@@ -1,6 +1,6 @@
 # Which CEL implementation
 
-The corpus wall's schema puts one CEL expression in front of two runtimes: TypeScript in the
+The wall's schema puts one CEL expression in front of two runtimes: TypeScript in the
 browser and Python in the feed. This spike checks whether the JS candidates actually agree with
 `cel-python`, the closest thing to a reference, on the expressions the schema needs. Read it
 before writing a predicate into a schema.
