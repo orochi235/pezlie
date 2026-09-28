@@ -160,9 +160,7 @@ rather than draw a lie.
 
 **Tests split along the same seam as the code.** Machinery assertions live in
 `wall`; policy assertions — *does this condition turn a cell red* — live with
-the host. **`wall`'s source and suite name no host's domain**, and
-`wall/test/leak.test.ts` fails on one; that is a better detector than reading
-imports.
+the host. **`wall`'s source and suite name no host's domain.**
 
 **`wall`'s tests use their own spec**, `wall/test/fixture.ts`, a corpus with
 nothing in common with any real host that exercises every feature of the
