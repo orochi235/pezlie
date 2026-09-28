@@ -146,3 +146,10 @@ describe('group labels', () => {
     expect(laid.bands.map((b) => [b.key, b.label])).toEqual([['1974', 'year 1974'], ['2011', 'year 2011']]);
   });
 });
+
+it('makes each group a square block under a square fill, unless the square is wider than the wall', () => {
+  const groups = [{ key: 'a', count: 10 }, { key: 'b', count: 200 }];
+  const { blocks } = flowBlocks(groups, { cell: 10, gap: 0, cols: 12, fill: 'corner' }, 0, 1);
+  expect(blocks[0]).toMatchObject({ cols: 4, fill: 'corner' });
+  expect(blocks[1]!.fill).toBeUndefined();
+});

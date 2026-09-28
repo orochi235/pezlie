@@ -90,6 +90,8 @@ export interface WallProps<T extends Item> {
   /** Draw from the tile pyramid rather than cell by cell: for cells too small
    *  to carry badges, where a whole corpus can be on screen. */
   tiled?: boolean;
+  /** The position under the pointer as it changes, null once it leaves. */
+  onHover?: (position: number | null) => void;
   /** The magnifier's diameter in CSS pixels. */
   lensDiameter?: number;
   /** The cells under the magnifier and how much it magnifies them, or null
@@ -134,7 +136,7 @@ export function Wall<T extends Item>({
   pixelScale = 1, appearance, tint, gradient, stale = false,
   sceneRenderer = false, linkedBadges, linkTarget, cssRoot = '--wall',
   drawMark, washColor = DEFAULT_WASH, ground, describe, tiled = false,
-  lensDiameter = LENS_DIAMETER, onLens, lensImages,
+  lensDiameter = LENS_DIAMETER, onLens, lensImages, onHover,
 }: WallProps<T>) {
   const ref = useRef<HTMLCanvasElement>(null);
   const glRef = useRef<HTMLCanvasElement>(null);
@@ -433,7 +435,15 @@ export function Wall<T extends Item>({
       .start(dragCtx({ x: 0, y: 0 }), { params: { inertia: {} } });
   };
 
+  const hovered = useRef<number | null>(null);
+  const hover = (position: number | null) => {
+    if (hovered.current === position) return;
+    hovered.current = position;
+    onHover?.(position);
+  };
+
   const onPointerMove = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (onHover) hover(hitTest(e)?.position ?? null);
     const held = downRef.current;
     if (held.has(e.pointerId)) {
       const before = pinchPair(held);
@@ -522,6 +532,7 @@ export function Wall<T extends Item>({
           onPointerMove={onPointerMove}
           onPointerUp={(e) => onPointerRelease(e, 'commit')}
           onPointerCancel={(e) => onPointerRelease(e, 'cancel')}
+          onPointerLeave={() => hover(null)}
           onClick={(e) => {
             if (suppressClickRef.current) { suppressClickRef.current = false; return; }
             // The first click of a double click; onDoubleClick takes it.

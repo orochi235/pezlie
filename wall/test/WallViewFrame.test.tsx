@@ -150,3 +150,26 @@ it('loads the cells under the magnifier at the size it draws them', async () => 
   await waitFor(() => expect(loose().length).toBeGreaterThan(0));
   act(() => { fireEvent.keyUp(window, { key: 'Alt' }); });
 });
+
+it('shows the hovered cell large while space is held, and only then', async () => {
+  const { canvas } = await mount(many);
+  const look = () => document.querySelector('.wall-quicklook');
+  const space = (type: 'keyDown' | 'keyUp', target: Element | Window = window) =>
+    fireEvent[type](target, { key: ' ', code: 'Space' });
+
+  // Nothing under the pointer and nothing picked: space is the page's.
+  expect(space('keyDown')).toBe(true);
+  expect(look()).toBeNull();
+  space('keyUp');
+
+  fireEvent.pointerMove(canvas, { clientX: 100, clientY: 100 });
+  expect(space('keyDown')).toBe(false);
+  expect(look()?.getAttribute('aria-label')).toMatch(/^t\d+$/);
+  space('keyUp');
+  expect(look()).toBeNull();
+
+  const field = document.body.appendChild(document.createElement('input'));
+  space('keyDown', field);
+  expect(look()).toBeNull();
+  field.remove();
+});

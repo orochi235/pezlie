@@ -2,7 +2,7 @@ import type { View } from '@weasel-js/core';
 import type { CompiledSpec } from './cel';
 import { tagsOf, tintColumn, type Facts } from './derive';
 import { drawPaintCommand, type DrawOptions } from './draw2d';
-import { rectAt, visiblePositions, visibleSpans, type Laid } from './layout';
+import { indexAt, rectAt, visiblePositions, visibleSpans, type Laid } from './layout';
 import { GLYPH_MIN_PX, glyphBlend, paintCommands, STALE_WASH, type Appearance } from './paint';
 import type { Palette } from './palette';
 import type { Item } from './schema';
@@ -148,8 +148,8 @@ function pixelTile<T extends Item>(scene: TileScene<T>, ctx: CanvasRenderingCont
     for (let r = r0; r <= r1; r++) {
       const py0 = Math.floor((block.y + r * laid.pitch - view.y) * scale);
       for (let c = c0; c <= c1; c++) {
-        const i = r * block.cols + c;
-        if (i >= block.count) break;
+        const i = indexAt(block, c, r);
+        if (i === null) continue;
         const row = laid.order[block.start + i]!;
         let color: number[];
         if (measured) {

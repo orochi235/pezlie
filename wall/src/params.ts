@@ -1,4 +1,5 @@
 import type { ConfigField } from '@weasel-js/labkit';
+import type { Fill } from './layout';
 import { cssVarTable, kebabKey, paramKeys, type StateSpec } from './states';
 
 /** The wall's view parameters: every tuning constant that governs layout,
@@ -8,6 +9,9 @@ export interface FixedParams {
   gap: number;
   /** 0 means auto: `ceil(sqrt(n))`. */
   cols: number;
+  /** The path the sorted cells take: across rows, a spiral out from the
+   *  center, or L-shaped shells out from the top-left corner. */
+  fill: Fill;
 
   showBadges: boolean;
   showCaptions: boolean;
@@ -54,6 +58,7 @@ const FIXED_DEFAULTS: FixedParams = {
   cell: 32,
   gap: 4,
   cols: 0,
+  fill: 'rows',
   showBadges: true,
   showCaptions: true,
   wash: false,
@@ -99,7 +104,7 @@ export function paramSchema(states: readonly StateSpec[]): ParamSchema {
   const colors = colorRows(states);
   const d = FIXED_DEFAULTS;
   const defaults = {
-    cell: d.cell, gap: d.gap, cols: d.cols,
+    cell: d.cell, gap: d.gap, cols: d.cols, fill: d.fill,
     ...Object.fromEntries(colors.map((row) => [row.key, row.color])),
     showBadges: d.showBadges, showCaptions: d.showCaptions, wash: d.wash,
     thickBorderFactor: d.thickBorderFactor, thinBorderFactor: d.thinBorderFactor,
@@ -115,6 +120,11 @@ export function paramSchema(states: readonly StateSpec[]): ParamSchema {
       { key: 'gap', label: 'Gap', type: 'slider', default: d.gap, min: 0, max: 32, step: 1 },
       { key: 'cols', label: 'Columns (0 = auto)', type: 'number',
         default: d.cols, min: 0, max: 64, step: 1 },
+      { key: 'fill', label: 'Fill', type: 'select', default: d.fill, options: [
+        { value: 'rows', label: 'Rows' },
+        { value: 'spiral', label: 'Spiral from the center' },
+        { value: 'corner', label: 'Shells from a corner' },
+      ] },
     ] },
     { label: 'Cell', fields: [
       { key: 'showBadges', label: 'Badges', type: 'checkbox', default: d.showBadges },

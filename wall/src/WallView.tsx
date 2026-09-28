@@ -35,6 +35,7 @@ import { movedRenders, useSheets, type Sheet } from './useSheets';
 import { targetPxFor, useVectorThumbs, type VectorHandle } from './useVectorThumbs';
 import { useVisualViewport } from './useVisualViewport';
 import { Wall, type Lens, type LensImages } from './Wall';
+import { QuickLook } from './QuickLook';
 import './WallView.css';
 
 const IDENTITY_VIEW: View = { x: 0, y: 0, scale: { x: 1, y: 1 } };
@@ -336,8 +337,9 @@ function WallViewBody<T extends Item>({
 
   const cols = params.cols > 0 ? params.cols : Math.max(1, Math.ceil(Math.sqrt(rows.length)));
   const laid = useMemo(
-    () => layout({ rows, facts: facts ?? undefined }, { cell: params.cell, gap: params.gap, cols }),
-    [layout, rows, facts, cols, params.cell, params.gap]);
+    () => layout({ rows, facts: facts ?? undefined },
+                 { cell: params.cell, gap: params.gap, cols, fill: params.fill }),
+    [layout, rows, facts, cols, params.cell, params.gap, params.fill]);
 
   useEffect(() => { onChange?.({ slot, selection, opened }); }, [onChange, slot, selection, opened]);
 
@@ -534,6 +536,35 @@ function WallViewBody<T extends Item>({
   };
   const cardItem = carded && facts && carded.row < facts.store.length
     && facts.store.id(carded.row) === carded.id ? facts.store.get(carded.row) : undefined;
+  // Space held shows the hovered cell large, or the picked one with the
+  // pointer off the wall; letting go puts it away.
+  const [hovered, setHovered] = useState<number | null>(null);
+  const [looking, setLooking] = useState<number | null>(null);
+  const lookTarget = useRef<number | null>(null);
+  lookTarget.current = hovered ?? carded?.position ?? explicitCaret;
+  useEffect(() => {
+    const typing = (t: EventTarget | null) => t instanceof HTMLElement
+      && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName));
+    const down = (e: KeyboardEvent) => {
+      if (e.key !== ' ' || e.repeat || e.metaKey || e.ctrlKey || e.altKey || typing(e.target)) return;
+      if (lookTarget.current === null) return;
+      e.preventDefault();
+      setLooking(lookTarget.current);
+    };
+    const up = (e: KeyboardEvent) => { if (e.key === ' ') setLooking(null); };
+    const away = () => setLooking(null);
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    window.addEventListener('blur', away);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+      window.removeEventListener('blur', away);
+    };
+  }, []);
+  const lookRow = looking !== null ? laid.order[looking] : undefined;
+  const lookItem = lookRow !== undefined && facts && lookRow < facts.store.length
+    ? facts.store.get(lookRow) : undefined;
   const openedItem = opened !== null && openedRow !== null && facts && openedRow < facts.store.length
     && facts.store.id(openedRow) === opened ? facts.store.get(openedRow) : itemAt(opened);
 
@@ -648,7 +679,7 @@ function WallViewBody<T extends Item>({
                     setCarded({ id: facts.store.id(row), row, position, at });
                   }}
                   onDragStart={() => { holdGlide(); setCarded(null); }}
-                  onLens={setLens} lensImages={lensImages}
+                  onLens={setLens} lensImages={lensImages} onHover={setHovered}
                   onOpen={(row) => {
                     // With no detail view to show, an open would only hide every card after it.
                     if (!renderDetail) return;
@@ -665,6 +696,12 @@ function WallViewBody<T extends Item>({
                   cssRoot={cssRoot} drawMark={drawMark} washColor={washColor} ground={ground}
                   describe={describe && ((row) => describe(facts.store.get(row)))}
                   tiled={params.cell * cam.scale.x < BADGE_MIN_PX && level < ladder.loose} />
+          )}
+          {lookItem && (
+            <QuickLook item={lookItem} slot={drawnSlot} urls={urls} stage={size}
+                       placeholder={shownLoose.get(lookItem.id) ?? null}
+                       filter={imageFilter} filterImage={filterImage} maskUrls={maskLayer}
+                       label={describe?.(lookItem)} />
           )}
           {stale && (
             <p className="wall-stale" role="status">

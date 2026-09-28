@@ -1,5 +1,6 @@
 import { projectColumn } from './derive';
-import type { Band, Block, Layout, LayoutInput, LayoutOptions, Rect } from './layout';
+import { rowsOf, squareSide, type Band, type Block, type Layout, type LayoutInput,
+  type LayoutOptions, type Rect } from './layout';
 import type { Item } from './schema';
 
 /** The key an item with no value for a grouping falls under. */
@@ -54,15 +55,19 @@ export function flowBlocks(groups: Group[], opts: LayoutOptions, top: number,
 
   for (const group of groups) {
     const n = group.count;
-    const c = blockCols(n, opts.cols);
-    const rows = Math.ceil(n / c);
-    const w = c * pitch;
+    // A square fill wider than the wall falls back to rows.
+    const side = squareSide(n);
+    const fill = opts.fill && opts.fill !== 'rows' && side <= opts.cols ? opts.fill : undefined;
+    const block: Block = fill ? { x, y: 0, cols: side, start: at, count: n, fill }
+      : { x, y: 0, cols: blockCols(n, opts.cols), start: at, count: n };
+    const rows = rowsOf(block);
+    const w = block.cols * pitch;
     if (x > 0 && x + w > width) {
       x = 0;
       y += rowHeight + gutter;
       rowHeight = 0;
     }
-    blocks.push({ x, y: y + headerRows * pitch, cols: c, start: at, count: n });
+    blocks.push({ ...block, x, y: y + headerRows * pitch });
     at += n;
     const h = headerRows * pitch + rows * pitch - opts.gap;
     bands.push({ key: group.key, label: group.label ?? group.key, count: n,
@@ -89,7 +94,7 @@ function boundsOf(blocks: Block[], bands: Band[], opts: LayoutOptions): { w: num
   for (const b of blocks) {
     if (b.count === 0) continue;
     grow({ x: b.x, y: b.y, w: Math.min(b.count, b.cols) * pitch - opts.gap,
-           h: Math.ceil(b.count / b.cols) * pitch - opts.gap });
+           h: rowsOf(b) * pitch - opts.gap });
   }
   for (const band of bands) grow(band.rect);
   return { w, h };

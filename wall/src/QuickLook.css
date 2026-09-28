@@ -1,0 +1,23 @@
+.wall-quicklook {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: var(--quicklook-side);
+  height: var(--quicklook-side);
+  box-sizing: border-box;
+  pointer-events: none;
+  border: var(--wzl-border-w) solid var(--wzl-border);
+  border-radius: var(--wzl-radius-md);
+  box-shadow: 0 12px 40px var(--wzl-shadow);
+  background-color: var(--wzl-surface, Canvas);
+  background-image:
+    linear-gradient(var(--wzl-surface-raised), var(--wzl-surface-raised)),
+    linear-gradient(var(--wzl-surface-sunken), var(--wzl-surface-sunken));
+  overflow: hidden;
+}
+
+.wall-quicklook__picture {
+  display: block;
+  width: 100%;
+  height: 100%;
+}

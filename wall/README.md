@@ -46,7 +46,11 @@ have 8px and 32px sheets and 128px loose tiles.
 slots, the current slot, `setSlot`, `reveal(id)` and `poll()` — for a host
 drawing its own slot picker or search; `slotPicker={false}` drops the built-in
 one. `reveal` centers a drawn item and opens its card, and answers
-`'filtered'` or `'absent'` when it cannot.
+`'filtered'` or `'absent'` when it cannot. Holding space shows the item under the
+pointer, or the picked one, large over the wall until it is let go. The params
+panel's Fill lays the sorted cells across rows, in a spiral out from the center,
+or in L-shaped shells out from the top-left corner; `LayoutOptions.fill` does the
+same for a host's own layout, and a grouped layout squares each group's block.
 
 `fetchItems` answers with `{ items, version }` — objects, fine for tens of
 thousands — or `{ table, version }`, an Arrow table in index order, which is
