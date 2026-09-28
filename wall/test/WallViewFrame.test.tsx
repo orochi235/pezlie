@@ -131,3 +131,22 @@ it('never glides for the first click of a double click', async () => {
     expect(animate).not.toHaveBeenCalled();
   } finally { vi.useRealTimers(); }
 });
+
+it('loads the cells under the magnifier at the size it draws them', async () => {
+  const asked: string[] = [];
+  vi.stubGlobal('Image', class {
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    set src(value: string) { asked.push(value); }
+  });
+  const { canvas } = await mount(many);
+  // 36px cells: the camera stays on the sheets and asks for no loose tile.
+  const loose = () => asked.filter((u) => /\/128\/t\d+\.webp/.test(u));
+  expect(loose()).toEqual([]);
+  act(() => {
+    canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 100, clientY: 100, bubbles: true }));
+  });
+  act(() => { fireEvent.keyDown(window, { key: 'Alt', altKey: true }); });
+  await waitFor(() => expect(loose().length).toBeGreaterThan(0));
+  act(() => { fireEvent.keyUp(window, { key: 'Alt' }); });
+});

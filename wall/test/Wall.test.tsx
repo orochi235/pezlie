@@ -143,3 +143,28 @@ it('announces the row an explicit caret lands on', () => {
   const w = mount({ explicitCaret: 0, describe: (row) => `row ${row}` });
   expect(w.view.container.querySelector('.wall-caret-announce')!.textContent).toBe('row 2');
 });
+
+it('reports the cells under the lens while it is up, and draws them from the sharper pictures it is given', async () => {
+  const drawn: unknown[] = [];
+  const ctx = new Proxy({}, {
+    get: (_t, key) => (key === 'drawImage' ? (img: unknown) => { drawn.push(img); }
+      : key === 'measureText' ? () => ({ width: 0 }) : () => {}),
+    set: () => true,
+  });
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(ctx as never);
+  const sharp = document.createElement('canvas');
+  const onLens = vi.fn();
+  const w = mount({ onLens, lensImages: { loose: new Map([['t2', sharp]]) } });
+  act(() => {
+    w.canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 10, clientY: 10, bubbles: true }));
+  });
+  act(() => { fireEvent.keyDown(window, { key: 'Alt', altKey: true }); });
+  await waitFor(() => expect(onLens).toHaveBeenCalledWith(
+    expect.objectContaining({ positions: expect.arrayContaining([0]) })));
+  const bubble = document.querySelector('.lk-loupe__canvas') as HTMLCanvasElement;
+  expect(bubble.style.width).toBe('500px');
+  // Position 0 holds row 2, whose id is t2.
+  await waitFor(() => expect(drawn).toContain(sharp));
+  act(() => { fireEvent.keyUp(window, { key: 'Alt' }); });
+  await waitFor(() => expect(onLens).toHaveBeenLastCalledWith(null));
+});

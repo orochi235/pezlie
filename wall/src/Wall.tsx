@@ -90,7 +90,31 @@ export interface WallProps<T extends Item> {
   /** Draw from the tile pyramid rather than cell by cell: for cells too small
    *  to carry badges, where a whole corpus can be on screen. */
   tiled?: boolean;
+  /** The magnifier's diameter in CSS pixels. */
+  lensDiameter?: number;
+  /** The cells under the magnifier and how much it magnifies them, or null
+   *  once it is put away, so a host can load them at the size they are drawn. */
+  onLens?: (lens: Lens | null) => void;
+  /** What the magnifier draws from, where the host has loaded sharper
+   *  pictures than the wall's; each falls back to the wall's own. */
+  lensImages?: LensImages;
 }
+
+export interface Lens { positions: readonly number[]; factor: number }
+
+export interface LensImages {
+  sheet?: SheetImage | null;
+  manifest?: SheetManifest | null;
+  loose?: Map<string, CanvasImageSource>;
+  vector?: Map<string, CanvasImageSource>;
+}
+
+/** Twice and a half labkit's default, so a lens shows a neighborhood rather
+ *  than a cell or two. */
+export const LENS_DIAMETER = 500;
+/** Past this many cells under the lens, none are reported: the lens is over
+ *  cells too small for sharper pictures to matter. */
+const MAX_LENS_CELLS = 2_000;
 
 function ongoingInvoker(action: typeof viewportDragPanAction) {
   if (!action.invoker || action.invoker.timing !== 'ongoing') {
@@ -110,6 +134,7 @@ export function Wall<T extends Item>({
   pixelScale = 1, appearance, tint, gradient, stale = false,
   sceneRenderer = false, linkedBadges, linkTarget, cssRoot = '--wall',
   drawMark, washColor = DEFAULT_WASH, ground, describe, tiled = false,
+  lensDiameter = LENS_DIAMETER, onLens, lensImages,
 }: WallProps<T>) {
   const ref = useRef<HTMLCanvasElement>(null);
   const glRef = useRef<HTMLCanvasElement>(null);
@@ -179,7 +204,7 @@ export function Wall<T extends Item>({
     performance.mark(COMPLETE_MARK);
   };
 
-  const loupeCapability = useMemo(() => resolveLoupe(true), []);
+  const loupeCapability = useMemo(() => resolveLoupe({ diameter: lensDiameter }), [lensDiameter]);
   const loupe = useLoupe({ capability: loupeCapability, hostRef: ref, enabled: false });
   const lensRef = useRef<HTMLCanvasElement>(null);
 
@@ -222,10 +247,11 @@ export function Wall<T extends Item>({
   // the pointer whenever nobody is navigating by keyboard.
   const caretDrawn = explicitCaret;
 
-  const commandsFor = (at: View, overlayOnly = false, only: ArrayLike<number> = visible) =>
+  const commandsFor = (at: View, overlayOnly = false, only: ArrayLike<number> = visible,
+                       from: LensImages = { manifest, loose, vector }) =>
     paintCommands({
-      compiled, facts, order, rect: rectOf, visible: only, cam: at, manifest, palette, loose,
-      vector, highlight, highlightTag, caret: overlayOnly ? null : caretDrawn,
+      compiled, facts, order, rect: rectOf, visible: only, cam: at, manifest: from.manifest ?? null,
+      palette, loose: from.loose, vector: from.vector, highlight, highlightTag, caret: overlayOnly ? null : caretDrawn,
       appearance, bands: laid.bands, tint, gradient, stale, ground,
     });
 
@@ -321,13 +347,39 @@ export function Wall<T extends Item>({
     ctx.clearRect(0, 0, d, d);
     ctx.imageSmoothingEnabled = true;
     const offset = { x: d / 2 - loupe.aim.x, y: d / 2 - loupe.aim.y };
-    for (const cmd of commandsFor(zoomAt(cam, loupe.aim, loupe.factor))) {
-      drawPaintCommand(ctx, cmd, sheet, palette, { ...options, offset });
+    const merged = (own?: Map<string, CanvasImageSource>, lens?: Map<string, CanvasImageSource>) =>
+      (lens?.size ? new Map([...(own ?? []), ...lens]) : own);
+    const lensSheet = lensImages?.sheet && lensImages.manifest ? lensImages : null;
+    const from: LensImages = {
+      manifest: lensSheet ? lensSheet.manifest : manifest,
+      loose: merged(loose, lensImages?.loose),
+      vector: merged(vector, lensImages?.vector),
+    };
+    for (const cmd of commandsFor(zoomAt(cam, loupe.aim, loupe.factor), false, visible, from)) {
+      drawPaintCommand(ctx, cmd, lensSheet ? lensSheet.sheet! : sheet, palette, { ...options, offset });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loupe.visible, loupe.aim, loupe.factor, loupeCapability.diameter, compiled, facts, laid,
       rectOf, visible, cam, sheet, manifest, palette, loose, vector, highlight, caretDrawn,
-      appearance, tint, gradient, stale, width, height, options]);
+      appearance, tint, gradient, stale, width, height, options, lensImages]);
+
+  // Which cells the lens covers, told to the host only when that changes.
+  const lensKey = useRef('');
+  useEffect(() => {
+    if (!onLens) return;
+    if (!loupe.visible) {
+      if (lensKey.current) { lensKey.current = ''; onLens(null); }
+      return;
+    }
+    const d = loupeCapability.diameter;
+    const positions = visiblePositions(laid, zoomAt(cam, loupe.aim, loupe.factor), {
+      x: loupe.aim.x - d / 2, y: loupe.aim.y - d / 2, width: d, height: d,
+    }, MAX_LENS_CELLS) ?? [];
+    const key = `${loupe.factor}:${positions.join(',')}`;
+    if (key === lensKey.current) return;
+    lensKey.current = key;
+    onLens({ positions, factor: loupe.factor });
+  }, [onLens, loupe.visible, loupe.aim, loupe.factor, loupeCapability.diameter, cam, laid]);
 
   const hitTest = (e: { clientX: number; clientY: number; currentTarget: HTMLCanvasElement }) => {
     const [sx, sy] = clientToCanvas(e.currentTarget, e.clientX, e.clientY);

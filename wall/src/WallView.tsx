@@ -34,7 +34,7 @@ import { useParams } from './useParams';
 import { movedRenders, useSheets, type Sheet } from './useSheets';
 import { targetPxFor, useVectorThumbs, type VectorHandle } from './useVectorThumbs';
 import { useVisualViewport } from './useVisualViewport';
-import { Wall } from './Wall';
+import { Wall, type Lens, type LensImages } from './Wall';
 import './WallView.css';
 
 const IDENTITY_VIEW: View = { x: 0, y: 0, scale: { x: 1, y: 1 } };
@@ -470,14 +470,40 @@ function WallViewBody<T extends Item>({
   };
   void targetPxFor;
 
-  const active = sheets[sheetFor(level, ladder)] ?? null;
-  const activeImage = useMemo(() => {
-    const image = active?.image ?? null;
-    if (!image || !imageFilter) return image;
-    const mask = masks.slot === drawnSlot && active ? masks.sheets[active.manifest.level] : undefined;
+  const shownSheet = useCallback((sheet: Sheet | null) => {
+    const image = sheet?.image ?? null;
+    if (!sheet || !image || !imageFilter) return image;
+    const mask = masks.slot === drawnSlot ? masks.sheets[sheet.manifest.level] : undefined;
     return filterImage(image, imageFilter,
-                       mask && sameLayout(mask.manifest, active!.manifest) ? mask.image : null);
-  }, [active, imageFilter, filterImage, masks, drawnSlot]);
+                       mask && sameLayout(mask.manifest, sheet.manifest) ? mask.image : null);
+  }, [imageFilter, filterImage, masks, drawnSlot]);
+  const active = sheets[sheetFor(level, ladder)] ?? null;
+  const activeImage = useMemo(() => shownSheet(active), [shownSheet, active]);
+
+  // The magnifier draws its cells at `factor` times their size, so it loads
+  // them at the level that size calls for, on the same rungs as the camera.
+  const [lens, setLens] = useState<Lens | null>(null);
+  const lensPx = cellPx * (lens?.factor ?? 1);
+  const lensLevel = lens ? levelFor(lensPx, ladder) : 0;
+  const lensItems = useMemo(
+    () => (lens && facts ? lens.positions.map((p) => facts.store.get(laid.order[p]!)) : []),
+    [lens, facts, laid]);
+  const lensAt = useMemo(() => lensItems.map((_, i) => i), [lensItems]);
+  const lensLoose = useLooseThumbs(lensItems, lensAt, lensLevel, drawnSlot, urls, undefined,
+                                   ladder.loose);
+  const lensVector = useVectorThumbs(lensItems, lensAt, lensLevel, drawnSlot, urls, lensPx);
+  const lensLooseMasks = useLooseThumbs(lensItems, lensAt, lensLevel, drawnSlot,
+                                        masked ? maskLayer : null, undefined, ladder.loose, masked);
+  const lensVectorMasks = useVectorThumbs(lensItems, lensAt, lensLevel, drawnSlot,
+                                          masked ? maskLayer : null, lensPx, undefined, masked);
+  const lensSheet = lens && lensLevel < ladder.loose ? sheets[sheetFor(lensLevel, ladder)] ?? null : null;
+  const lensImages = useMemo<LensImages>(() => ({
+    sheet: lensSheet && lensSheet !== active ? shownSheet(lensSheet) : null,
+    manifest: lensSheet && lensSheet !== active ? lensSheet.manifest : null,
+    loose: filterMap(lensLoose, imageFilter, filterImage, lensLooseMasks),
+    vector: filterMap(lensVector, imageFilter, filterImage, lensVectorMasks),
+  }), [lensSheet, active, shownSheet, lensLoose, lensVector, lensLooseMasks, lensVectorMasks,
+       imageFilter, filterImage]);
 
   const reported = useRef('');
   useEffect(() => {
@@ -622,6 +648,7 @@ function WallViewBody<T extends Item>({
                     setCarded({ id: facts.store.id(row), row, position, at });
                   }}
                   onDragStart={() => { holdGlide(); setCarded(null); }}
+                  onLens={setLens} lensImages={lensImages}
                   onOpen={(row) => {
                     // With no detail view to show, an open would only hide every card after it.
                     if (!renderDetail) return;

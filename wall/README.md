@@ -110,6 +110,9 @@ A layout returns blocks of cells rather than a rect per item; `blockLayout` and
 `bandedLayout` group by a `GroupKey`, which names the fields it reads. `Wall`
 draws a laid wall on a canvas and handles pan, pinch, keyboard and clicks; below
 badge size it draws from a pyramid of tiles it renders as they come into view.
+Holding Alt raises a magnifier; `onLens` reports the cells under it and how much
+it magnifies, and `lensImages` hands it sharper pictures for them, which is how
+`WallView` keeps a magnified cell from being an enlarged thumbnail.
 `useItems`, `useSheets`, `useLooseThumbs` and `useVectorThumbs` load what it
 draws; `Legend`, `Sidebar`, `ItemCard` and `ParamsPanel` are the chrome. CSS
 classes are `wall-*`; colors can be overridden with custom properties under
