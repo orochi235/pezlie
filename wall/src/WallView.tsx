@@ -49,6 +49,9 @@ const NO_ROWS = new Uint32Array(0);
 const MAX_THUMB_CELLS = 5_000;
 /** How much of the viewport's height a revealed cell fills at least. */
 const REVEAL_MIN_HEIGHT = 0.5;
+/** How long a click waits for its second before the camera moves. The OS
+ *  setting is not visible to a page. */
+export const DOUBLE_CLICK_MS = 300;
 /** How far past each edge of the screen, in screens, pictures load ahead. */
 const THUMB_OVERSCAN = 0.5;
 
@@ -523,6 +526,9 @@ function WallViewBody<T extends Item>({
 
   // A clicked cell too small to read glides in until it is one loose tile tall;
   // one already that big does not move the camera.
+  const glideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const holdGlide = () => { clearTimeout(glideTimer.current); glideTimer.current = undefined; };
+  useEffect(() => holdGlide, []);
   const glide = (position: number) => {
     const rect = rectAt(laid, position);
     const at = camRef.current;
@@ -588,14 +594,20 @@ function WallViewBody<T extends Item>({
                   tint={selection.tint} gradient={selection.gradient}
                   explicitCaret={explicitCaret} onExplicitCaretChange={setExplicitCaret}
                   onPan={(next) => { touched.current = true; updateCam(next); }}
-                  onPick={(row, at, position) => {
-                    glide(position);
+                  onPick={(row, at, position, via) => {
+                    holdGlide();
+                    // A double click opens the detail view; the camera waits
+                    // until the first click is known not to be one.
+                    if (via === 'click' && renderDetail) {
+                      glideTimer.current = setTimeout(() => glide(position), DOUBLE_CLICK_MS);
+                    } else glide(position);
                     setCarded({ id: facts.store.id(row), row, position, at });
                   }}
-                  onDragStart={() => setCarded(null)}
+                  onDragStart={() => { holdGlide(); setCarded(null); }}
                   onOpen={(row) => {
                     // With no detail view to show, an open would only hide every card after it.
                     if (!renderDetail) return;
+                    holdGlide();
                     setCarded(null); setOpenedRow(row); setOpened(facts.store.id(row));
                   }}
                   dragThresholdPx={params.dragThresholdPx} appearance={appearance}

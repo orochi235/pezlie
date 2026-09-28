@@ -41,7 +41,7 @@ function mount(overrides: Partial<WallProps<Thing>> = {}) {
 it('picks the row under a click, not its position in the view', () => {
   const w = mount();
   fireEvent.click(w.canvas, { clientX: 10, clientY: 10 });
-  expect(w.onPick).toHaveBeenCalledWith(2, { x: 10, y: 10 }, 0);
+  expect(w.onPick).toHaveBeenCalledWith(2, { x: 10, y: 10 }, 0, 'click');
 });
 
 it('opens the row under a double click', () => {
@@ -61,7 +61,7 @@ it('moves an explicit caret with the arrow keys and drops it on Escape', () => {
 it('picks the caret row on Enter, at the center of its cell', () => {
   const w = mount({ explicitCaret: 1 });
   fireEvent.keyDown(w.canvas, { key: 'Enter' });
-  expect(w.onPick).toHaveBeenCalledWith(0, { x: 124 + 60, y: 60 }, 1);
+  expect(w.onPick).toHaveBeenCalledWith(0, { x: 124 + 60, y: 60 }, 1, 'key');
 });
 
 it('follows a linked badge to its target instead of picking', () => {

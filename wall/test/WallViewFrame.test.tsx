@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CARD_DETAILS, CARD_PAD } from '../src/ItemCard';
 import { defaultUrls } from '../src/urls';
-import { WallView, type WallHeader } from '../src/WallView';
+import { DOUBLE_CLICK_MS, WallView, type WallHeader } from '../src/WallView';
 import { SPEC, thing, type Thing } from './fixture';
 
 // The camera glide is the thing under test, and a tween that runs on
@@ -50,7 +50,7 @@ const few = [thing('a', 0), thing('b', 1, { level: 2 }), thing('c', 2, { err: 'x
              thing('d', 3)];
 const many = Array.from({ length: 400 }, (_, i) => thing(`t${i}`, i, { level: i % 3 }));
 
-async function mount(items: Thing[]) {
+async function mount(items: Thing[], detail = false) {
   let wall: WallHeader | undefined;
   const { container } = render(
     <WallView title="things" spec={SPEC} urls={urls} defaultSlot="north"
@@ -58,6 +58,7 @@ async function mount(items: Thing[]) {
               fetchSlots={vi.fn(() => Promise.resolve([{ slot: 'north', n: items.length }]))}
               storageKey="test.frame"
               renderCard={(item) => <span>card {item.id}</span>}
+              {...(detail ? { renderDetail: (item: Thing) => <p>detail {item.id}</p> } : {})}
               header={(w) => { wall = w; return null; }} />);
   await screen.findByText('warning');
   const canvas = await waitFor(() => {
@@ -105,4 +106,28 @@ it('leaves the camera where it is when the clicked cell is already that big', as
   fireEvent.click(canvas, { clientX: 100, clientY: 100 });
   expect(num(await openedCard(), '--open-h')).toBeGreaterThanOrEqual(LOOSE);
   expect(animate).not.toHaveBeenCalled();
+});
+
+it('holds the glide until a click is known not to start a double click', async () => {
+  const { canvas } = await mount(many, true);
+  vi.useFakeTimers();
+  try {
+    fireEvent.click(canvas, { clientX: 100, clientY: 100, detail: 1 });
+    vi.advanceTimersByTime(DOUBLE_CLICK_MS - 1);
+    expect(animate).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(animate).toHaveBeenCalledTimes(1);
+  } finally { vi.useRealTimers(); }
+});
+
+it('never glides for the first click of a double click', async () => {
+  const { canvas } = await mount(many, true);
+  vi.useFakeTimers();
+  try {
+    fireEvent.click(canvas, { clientX: 100, clientY: 100, detail: 1 });
+    fireEvent.click(canvas, { clientX: 100, clientY: 100, detail: 2 });
+    fireEvent.doubleClick(canvas, { clientX: 100, clientY: 100 });
+    vi.advanceTimersByTime(DOUBLE_CLICK_MS * 2);
+    expect(animate).not.toHaveBeenCalled();
+  } finally { vi.useRealTimers(); }
 });
