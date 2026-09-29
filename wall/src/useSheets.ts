@@ -34,6 +34,13 @@ export function movedRenders(before: { sha(row: number): string | null },
   return out;
 }
 
+/** Canvas2D draws a sheet's cells about 4x faster from a bitmap than from the
+ *  <img> it was loaded into; where one can't be made, the <img> serves. */
+function bitmapOf(img: HTMLImageElement): Promise<SheetImage> {
+  if (typeof createImageBitmap !== 'function') return Promise.resolve(img);
+  return createImageBitmap(img).catch(() => img);
+}
+
 function loadImage(src: string): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
     const img = new Image();
@@ -128,7 +135,9 @@ export function useSheets(urls: SlotUrls | null, slot: string):
         void fetchManifest(urls.manifest(slot, level)).then((manifest) => {
           if (!live) return settle();
           const img = new Image();
-          img.onload = () => { next[level] = { image: img, manifest }; settle(); };
+          img.onload = () => {
+            void bitmapOf(img).then((image) => { next[level] = { image, manifest }; settle(); });
+          };
           // A slot with no sheet baked settles too, or the wall would hold the
           // previous slot's drawings for the rest of the session.
           img.onerror = () => settle();

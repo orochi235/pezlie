@@ -78,16 +78,16 @@ the work profile, not a failure.
    Whether the rest is enough is the owner's call from using it.
 4. **Render fixes found by reading the code, unmeasured unless noted.** Work
    down in order and prove each with `npm run bench -- --against main` in
-   `wall/`. Items 5–8 were found only by a subagent.
+   `wall/`. Items 7–8 were found only by a subagent.
    Done: 1, legend hover (hover 190 → ~90 ms, leave 47 → ~20 ms); 2, ramp
    swatches cached per gradient (8px tinted tiles −60%); 3, border and
    overlay work skipped for cells without them (8px tiles −26 to −36%); 4,
    loose thumbnails merged once a frame (no bench reaches it; a test counts renders);
    5, a row's sheet membership remembered per manifest (16px sheet tiles −54%,
    frames −40%). Filling it for every row up front took 340–710 ms on a million
-   rows, so it fills as rows are drawn.
-   6. `Wall.tsx`: the 2D path draws the sprite sheet from an `HTMLImageElement`.
-      Always make an `ImageBitmap`; `decode()` loose thumbnails.
+   rows, so it fills as rows are drawn; 6, sheets loaded as `ImageBitmap`s
+   (Canvas2D draws their cells 4x faster in `bench/sheet-source.mjs`; no host
+   here loads a sheet, so untimed in the wall).
    7. `tiles.ts`: each tile render makes a new 512×512 canvas and `ImageData`,
       writing 4 bytes per pixel. Reuse both; one `Uint32Array` store per pixel.
    8. `draw2d.ts`: glyph cells set the font and measure text every frame.

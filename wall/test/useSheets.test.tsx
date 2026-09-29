@@ -66,6 +66,24 @@ it('loads every sheet level for the slot, versioning the image off its manifest'
   expect(result.current.sheets[SHEET_LEVELS[0]!]!.manifest.level).toBe(SHEET_LEVELS[0]);
 });
 
+it('hands the sheet over as a bitmap where one can be made, else as the image', async () => {
+  serve();
+  const made: unknown[] = [];
+  vi.stubGlobal('createImageBitmap', vi.fn(async (img: FakeImage) => {
+    if (img.src.includes('sheet-32')) throw new Error('cannot');
+    const bitmap = { from: img.src };
+    made.push(bitmap);
+    return bitmap;
+  }));
+  const { result } = renderHook(() => useSheets(urls, 'first'));
+  await waitFor(() => expect(Object.keys(result.current.sheets)).toHaveLength(SHEET_LEVELS.length));
+  for (const level of SHEET_LEVELS) {
+    const image = result.current.sheets[level]!.image;
+    if (level === 32) expect(image).toBeInstanceOf(FakeImage);
+    else expect(made).toContain(image);
+  }
+});
+
 it('loads the sheets the slot says it was baked at', async () => {
   const asked = serve(new Set(), { first: { sheets: [16, 64], loose: 256 } });
   const { result } = renderHook(() => useSheets(urls, 'first'));

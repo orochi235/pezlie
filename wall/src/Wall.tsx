@@ -261,6 +261,7 @@ export function Wall<T extends Item>({
   // the previous one when a slot swap replaces it.
   useEffect(() => {
     if (!sceneRenderer || !sheet) { setSheetBitmap(null); return; }
+    if (typeof ImageBitmap !== 'undefined' && sheet instanceof ImageBitmap) { setSheetBitmap(sheet); return; }
     let live = true;
     void createImageBitmap(sheet)
       .then((b) => { if (live) setSheetBitmap(b); })
