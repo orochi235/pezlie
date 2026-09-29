@@ -6,7 +6,7 @@ import { gridLayout } from '../src/layout';
 import { DEFAULT_APPEARANCE, STALE_WASH } from '../src/paint';
 import { defaultPalette } from '../src/palette';
 import {
-  coveringTiles, FADE_MS, TILE_PX, TileCache, tileKey, tileLevel, type TileScene, type TileSurface,
+  coveringTiles, FADE_MS, nextTiles, TILE_PX, TileCache, tileKey, tileLevel, type TileScene, type TileSurface,
 } from '../src/tiles';
 import { ramp, STATUS } from '../src/tint';
 import { SPEC, thing, type Thing } from './fixture';
@@ -239,6 +239,25 @@ describe('TileCache', () => {
     expect(pixels({ stale: true, tint: 'score' })).toEqual([
       mix(ramp(0.5), STALE_WASH), mix(ramp(0.5), STALE_WASH), mix(ramp(1), STALE_WASH),
       mix(base.palette.unmatched.fill, STALE_WASH)]);
+  });
+
+  it('keeps the unhovered tiles through a hover, and drops them when the scene changes under it', () => {
+    const { make } = surfaces();
+    const base = scene(items, 1, 8);
+    let held = nextTiles({ tiles: null, unhovered: null }, base, base, make);
+    const unhovered = held.tiles!;
+    held = nextTiles(held, { ...base, highlight: 'warn' }, base, make);
+    expect(held.tiles).not.toBe(unhovered);
+    held = nextTiles(held, { ...base, highlightTag: 'big' }, base, make);
+    expect(held.unhovered).toBe(unhovered);
+    held = nextTiles(held, base, base, make);
+    expect(held.tiles).toBe(unhovered);
+
+    const hovered = nextTiles(held, { ...base, highlight: 'warn' }, base, make);
+    const refiltered = { ...base, stale: true };
+    const moved = nextTiles(hovered, { ...refiltered, highlight: 'warn' }, refiltered, make);
+    expect(moved.unhovered).toBeNull();
+    expect(nextTiles(moved, refiltered, refiltered, make).tiles).not.toBe(unhovered);
   });
 
   it('draws larger cells through paint, without badges or captions', () => {

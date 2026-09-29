@@ -75,17 +75,11 @@ the work profile, not a failure.
    roadmap at the end of the million-item spec. An emoji wall small enough to
    embed in the portfolio was asked about and not decided.
 3. **Pop-in, as of the last change.** A glyph cell now turns from a colored square into a character on a faint ground gradually with size (`glyphBlend`), and the wall shows one level at a time, crossfading the whole view when the next level is ready.
-   Whether the rest is enough is the owner's call from using it.4. **Render fixes found by reading the code, unmeasured unless noted.** Work
+   Whether the rest is enough is the owner's call from using it.
+4. **Render fixes found by reading the code, unmeasured unless noted.** Work
    down in order and prove each with `npm run bench -- --against main` in
-   `wall/` (legend hover in `hosts/unicode/bench/browser.mjs` for the first).
-   Items 1–4 were checked against the code; 5–8 only by a subagent.
-   1. Legend hover: **half done.** The pixel path now looks each color up
-      once per source × dimmed × washed × quiet (hover, tag hover, washed and
-      stale 1px tiles 69–81% faster in the paired bench; browser hover 190 →
-      ~90 ms, leave unchanged at 47 ms). Left: `highlight` and `highlightTag`
-      are still in the tile scene, so a hover or leave throws the tile cache
-      away and re-renders every tile; keeping the unhovered cache for the
-      leave is the obvious next step.
+   `wall/`. Items 2–4 were checked against the code; 5–8 only by a subagent.
+   Item 1, legend hover, is done: hover 190 → ~90 ms, leave 47 → ~20 ms.
    2. `ramp()` in `tint.ts` re-parses hex and builds an `rgb()` string per cell
       for 8 possible results. Cache them per gradient. First number: 8px tiles
       tinted by score 29–35 ms, by status 12 ms.

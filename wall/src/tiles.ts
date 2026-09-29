@@ -474,3 +474,19 @@ export const offscreenSurface: MakeSurface = (px) => {
   const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
   return { canvas: canvas as CanvasImageSource, ctx };
 };
+
+/** The cache drawing the scene now, and the one for the same scene unhovered,
+ *  held through a hover so leaving it shows those tiles again. */
+export interface SceneTiles<T extends Item> {
+  tiles: TileCache<T> | null;
+  unhovered: TileCache<T> | null;
+}
+
+export function nextTiles<T extends Item>(held: SceneTiles<T>, scene: TileScene<T>,
+                                          unhovered: TileScene<T>, make: MakeSurface): SceneTiles<T> {
+  if (held.tiles?.scene === scene) return held;
+  const tiles = held.unhovered?.scene === scene ? held.unhovered
+    : new TileCache(scene, make, held.tiles);
+  return { tiles, unhovered: scene === unhovered ? tiles
+    : held.unhovered?.scene === unhovered ? held.unhovered : null };
+}

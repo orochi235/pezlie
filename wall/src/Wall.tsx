@@ -21,7 +21,7 @@ import { centerReveal, panToReveal } from './reveal';
 import type { Item } from './schema';
 import type { SheetImage, SheetManifest } from './sheet';
 import { STATUS, type RampName } from './tint';
-import { offscreenSurface, TileCache } from './tiles';
+import { nextTiles, offscreenSurface, type SceneTiles } from './tiles';
 import './Wall.css';
 
 const ARROW_DIRECTION: Record<string, Direction> = {
@@ -187,16 +187,16 @@ export function Wall<T extends Item>({
     return () => { themeObserver.disconnect(); rootObserver?.disconnect(); };
   }, [compiled, cssRoot]);
 
-  const tileScene = useMemo(() => ({
-    compiled, facts, laid, manifest, sheet, palette, options, highlight, highlightTag,
+  const unhovered = useMemo(() => ({
+    compiled, facts, laid, manifest, sheet, palette, options, highlight: null, highlightTag: null,
     appearance: appearance ?? DEFAULT_APPEARANCE, tint: tint ?? STATUS, gradient: gradient ?? 'ember',
     stale, ground: ground ?? DEFAULT_GROUND,
-  }), [compiled, facts, laid, manifest, sheet, palette, options, highlight, highlightTag,
-       appearance, tint, gradient, stale, ground]);
-  const tilesRef = useRef<TileCache<T> | null>(null);
-  if (tilesRef.current?.scene !== tileScene) {
-    tilesRef.current = new TileCache(tileScene, offscreenSurface, tilesRef.current);
-  }
+  }), [compiled, facts, laid, manifest, sheet, palette, options, appearance, tint, gradient, stale, ground]);
+  const tileScene = useMemo(
+    () => (highlight === null && highlightTag === null ? unhovered : { ...unhovered, highlight, highlightTag }),
+    [unhovered, highlight, highlightTag]);
+  const tilesRef = useRef<SceneTiles<T>>({ tiles: null, unhovered: null });
+  tilesRef.current = nextTiles(tilesRef.current, tileScene, unhovered, offscreenSurface);
   // Bumped to draw again while tiles are still rendering.
   const [frame, setFrame] = useState(0);
   const marked = useRef<object | null>(null);
@@ -304,8 +304,8 @@ export function Wall<T extends Item>({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
     ctx.imageSmoothingEnabled = true;
-    if (tiled && tilesRef.current) {
-      const { complete, animating, pending } = tilesRef.current.draw(ctx, cam, { width, height }, dpr,
+    if (tiled && tilesRef.current.tiles) {
+      const { complete, animating, pending } = tilesRef.current.tiles.draw(ctx, cam, { width, height }, dpr,
                                                             TILE_BUDGET_MS);
       // The caret and band labels sit over the tiles, drawn fresh every frame.
       for (const cmd of commandsFor(cam, false, caretDrawn != null ? [caretDrawn] : [])) {
