@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from 'vitest';
-import { renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { thumbUrl, useLooseThumbs, wanted } from '../src/useLooseThumbs';
 import { defaultUrls, imageKey } from '../src/urls';
 import type { Item } from '../src/schema';
@@ -75,4 +75,25 @@ it('refetches only the tile of the item whose sha moved', () => {
   expect(asked).toHaveLength(2);
   rerender({ items: [before[0]!, item('b', 1, 'cccccccc2')] });
   expect(asked.slice(2)).toEqual(['/api/thumbs/naive/128/b.webp?v=cccccccc']);
+});
+
+it('takes a frame of arrivals in one update, not one per image', () => {
+  const images: { onload: (() => void) | null }[] = [];
+  vi.stubGlobal('Image', class {
+    onload: (() => void) | null = null;
+    constructor() { images.push(this); }
+    set src(_: string) {}
+  });
+  const frames: FrameRequestCallback[] = [];
+  vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => frames.push(cb));
+  vi.stubGlobal('cancelAnimationFrame', () => {});
+  const many = Array.from({ length: 50 }, (_, i) => item(`m${i}`, i, `sha${i}`));
+  let renders = 0;
+  const { result } = renderHook(() => { renders++; return useLooseThumbs(many, many.map((_, i) => i), 128, 'naive', urls); });
+  const before = renders;
+  act(() => { for (const img of images) img.onload!(); });
+  expect(result.current.size).toBe(0);
+  act(() => { for (const cb of frames.splice(0)) cb(0); });
+  expect(result.current.size).toBe(50);
+  expect(renders - before).toBe(1);
 });

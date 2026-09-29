@@ -66,22 +66,32 @@ export function useLooseThumbs<T extends Item>(items: readonly T[], visible: rea
   // Only unmounting stops an image landing. Keyed to the effect instead, an
   // image finishing after the next camera move was dropped and never re-asked.
   const mounted = useRef(true);
+  // Arrivals merge once a frame: one state update per screenful.
+  const arrived = useRef<Map<string, HTMLImageElement>>(new Map());
+  const flush = useRef<number | null>(null);
   useEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; };
+    return () => {
+      mounted.current = false;
+      if (flush.current !== null) cancelAnimationFrame(flush.current);
+      flush.current = null;
+    };
   }, []);
 
-  useEffect(() => {
+  const cold = () => {
     requested.current = new Set();
     latest.current = new Map();
+    arrived.current = new Map();
     setLoose(new Map());
-  }, [slot, looseLevel]);
+  };
+
+  useEffect(cold, [slot, looseLevel]);
 
   useEffect(() => {
     if (!handle) return;
     handle.current = {
       stats: () => ({ loaded: loose.size, requested: requested.current.size }),
-      reset: () => { requested.current = new Set(); latest.current = new Map(); setLoose(new Map()); },
+      reset: cold,
     };
     return () => { handle.current = null; };
   }, [handle, loose]);
@@ -95,7 +105,19 @@ export function useLooseThumbs<T extends Item>(items: readonly T[], visible: rea
       const img = new Image();
       img.onload = () => {
         if (!mounted.current || latest.current.get(item.id) !== key) return;
-        setLoose((prev) => new Map(prev).set(item.id, img));
+        arrived.current.set(item.id, img);
+        if (flush.current !== null) return;
+        flush.current = requestAnimationFrame(() => {
+          flush.current = null;
+          if (!mounted.current || arrived.current.size === 0) return;
+          const batch = arrived.current;
+          arrived.current = new Map();
+          setLoose((prev) => {
+            const next = new Map(prev);
+            for (const [id, landed] of batch) next.set(id, landed);
+            return next;
+          });
+        });
       };
       img.src = thumbUrl(urls, item, slot, looseLevel);
     }
