@@ -112,6 +112,40 @@ describe('TileCache', () => {
     expect(drawn[0]![1].slice(1)).toEqual([0, 0, TILE_PX * 2, TILE_PX * 2]);
   });
 
+  it('puts every tile edge on a device pixel, shared with its neighbor', () => {
+    const { make } = surfaces();
+    const dpr = 2;
+    const view = cam(1.37, 0.61, 0.7137);
+    const screen = { width: 1500, height: 800 };
+    // A drawImage's destination box is its last four arguments.
+    const boxes = (ctx: ReturnType<typeof fakeContext>) => ctx.calls
+      .filter(([name]) => name === 'drawImage').map(([, args]) => (args as number[]).slice(-4));
+    const onPixels = ([dx, dy, dw, dh]: number[]) =>
+      [dx!, dy!, dx! + dw!, dy! + dh!].every((v) => Number.isInteger(v * dpr));
+
+    const cache = new TileCache(scene(items, 1, 8), make);
+    cache.draw(fakeContext(), view, screen, dpr, 1000);
+    const settled = fakeContext();
+    cache.draw(settled, view, screen, dpr, 1000);
+    const drawn = boxes(settled);
+    expect(drawn.length).toBeGreaterThan(1);
+    expect(drawn.every(onPixels)).toBe(true);
+    const rights = new Set(drawn.map(([dx, , dw]) => dx! + dw!));
+    expect(drawn.map(([dx]) => dx!).filter((dx) => dx > 0).every((dx) => rights.has(dx))).toBe(true);
+
+    // Mid-render, a coarser tile and a finer one stand in.
+    const fresh = new TileCache(scene(items, 1, 8), make);
+    fresh.render(at(0, 0, 0));
+    fresh.render(at(2, 1, 1));
+    const partial = fakeContext();
+    let t = 0;
+    fresh.draw(partial, view, screen, dpr, 0, () => (t += 1));
+    const sources = partial.calls.filter(([name]) => name === 'drawImage');
+    expect(sources.some(([, args]) => args[0] === fresh.peek(tileKey(0, 0, 0))!.canvas && args.length === 9)).toBe(true);
+    expect(sources.some(([, args]) => args[0] === fresh.peek(tileKey(2, 1, 1))!.canvas)).toBe(true);
+    expect(boxes(partial).every(onPixels)).toBe(true);
+  });
+
   it('stands in for a missing tile with the part of a coarser one it covers', () => {
     const { make } = surfaces();
     const cache = new TileCache(scene(items, 1, 8), make);

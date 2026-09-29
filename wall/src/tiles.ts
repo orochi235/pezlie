@@ -91,6 +91,15 @@ export function coveringTiles(cam: View, viewport: { width: number; height: numb
   return out;
 }
 
+/** Where a world square lands on screen, edges on device pixels: Safari and
+ *  Firefox antialias image edges, so tiles meeting mid-pixel leave a hairline. */
+function placed(x: number, y: number, size: number, cam: View, dpr: number) {
+  const at = (w: number, origin: number, scale: number) => Math.round((w - origin) * scale * dpr) / dpr;
+  const dx = at(x, cam.x, cam.scale.x);
+  const dy = at(y, cam.y, cam.scale.y);
+  return { dx, dy, dw: at(x + size, cam.x, cam.scale.x) - dx, dh: at(y + size, cam.y, cam.scale.y) - dy };
+}
+
 function parseColor(css: string): [number, number, number] {
   const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})([0-9a-f]{2})?$/i.exec(css.trim());
   if (hex) {
@@ -394,22 +403,19 @@ export class TileCache<T extends Item> {
     let complete = true;
     let animating = false;
     for (const tile of coveringTiles(cam, viewport, dpr, level)) {
-      const dx = (tile.x - cam.x) * cam.scale.x;
-      const dy = (tile.y - cam.y) * cam.scale.y;
-      const dw = tile.size * cam.scale.x;
-      const dh = tile.size * cam.scale.y;
+      const { dx, dy, dw, dh } = placed(tile.x, tile.y, tile.size, cam, dpr);
       const own = this.#use(tile.key);
       if (!own) complete = false;
       const hit = own ?? this.#previous?.peek(tile.key);
       if (!hit) {
-        this.#standIn(ctx, tile, dx, dy, dw, dh);
+        this.#standIn(ctx, tile, cam, dpr);
         continue;
       }
       const age = since === null || hit.bornAt === undefined || hit.bornAt < since
         ? FADE_MS : t - hit.bornAt;
       if (age >= FADE_MS) { ctx.drawImage(hit.canvas, dx, dy, dw, dh); continue; }
       animating = true;
-      this.#standIn(ctx, tile, dx, dy, dw, dh);
+      this.#standIn(ctx, tile, cam, dpr);
       const alpha = ctx.globalAlpha;
       ctx.globalAlpha = alpha * Math.max(0, age / FADE_MS);
       ctx.drawImage(hit.canvas, dx, dy, dw, dh);
@@ -422,8 +428,8 @@ export class TileCache<T extends Item> {
     return this.#tiles.get(key) ?? this.#previous?.peek(key);
   }
 
-  #standIn(ctx: CanvasRenderingContext2D, tile: TileRef, dx: number, dy: number,
-           dw: number, dh: number) {
+  #standIn(ctx: CanvasRenderingContext2D, tile: TileRef, cam: View, dpr: number) {
+    const { dx, dy, dw, dh } = placed(tile.x, tile.y, tile.size, cam, dpr);
     const before = this.#previous?.peek(tile.key);
     if (before) { ctx.drawImage(before.canvas, dx, dy, dw, dh); return; }
     // Coarser first as the base, then any finer tiles over it: a zoom out
@@ -440,10 +446,11 @@ export class TileCache<T extends Item> {
       break;
     }
     for (let i = 0; i < 4; i++) {
-      const child = this.#held(tileKey(tile.z + 1, tile.tx * 2 + (i % 2), tile.ty * 2 + (i >> 1)));
-      if (child) {
-        ctx.drawImage(child.canvas, dx + (i % 2) * dw / 2, dy + (i >> 1) * dh / 2, dw / 2, dh / 2);
-      }
+      const sub = ref(tile.z + 1, tile.tx * 2 + (i % 2), tile.ty * 2 + (i >> 1));
+      const child = this.#held(sub.key);
+      if (!child) continue;
+      const box = placed(sub.x, sub.y, sub.size, cam, dpr);
+      ctx.drawImage(child.canvas, box.dx, box.dy, box.dw, box.dh);
     }
   }
 }
