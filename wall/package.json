@@ -33,6 +33,7 @@
   },
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json && rsync -a --include='*/' --include='*.css' --exclude='*' src/ dist/",
+    "bench": "NODE_OPTIONS=--expose-gc vite-node bench/render.ts",
     "prepublishOnly": "npm run typecheck && npm test && npm run build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"

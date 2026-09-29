@@ -1,17 +1,20 @@
 // The wall at a million items, measured in headless Chromium against its gates.
 //
-//   node hosts/unicode/bench/browser.mjs [--dpr 2] [--dev] [--shot wall.png]
+//   node hosts/unicode/bench/browser.mjs [--dpr 2] [--dev] [--shot wall.png] [--out run.json]
 //
 // Starts the feed server and serves a production build of the page (or the
 // Vite dev server, with --dev), loads the page once to warm both, then times on
 // a fresh page: first paint of every code point, frame
-// intervals over a scripted pan and zoom with the whole wall on screen, and
-// the time from each selection change to the next complete frame. Prints each
-// measurement as it lands and exits nonzero on a miss.
+// intervals over a scripted pan and zoom with the whole wall on screen, plain
+// and colored by age, the time from hovering and leaving each legend row to the
+// wall settling, and the time from each selection change to the next complete
+// frame. Prints each measurement as it lands and exits nonzero on a miss;
+// --out writes them for `wall/bench/compare.mjs`.
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 import { build, createServer, preview } from 'vite';
+import { summarize, writeRun } from '../../../wall/bench/compare.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const dprArg = process.argv.indexOf('--dpr');
@@ -24,6 +27,10 @@ const SCENE = process.argv.includes('--scene');
 // A fast machine draws either renderer inside a vsync; throttling shows which costs more.
 const throttleArg = process.argv.indexOf('--throttle');
 const THROTTLE = throttleArg > 0 ? Number(process.argv[throttleArg + 1]) || 1 : 1;
+const outArg = process.argv.indexOf('--out');
+const OUT = outArg > 0 ? process.argv[outArg + 1] : null;
+/** Legend rows hovered, each a run of the hover and leave cases. */
+const HOVERS = 6;
 const API_PORT = 8797;
 const VIEWPORT = { width: 1600, height: 1000 };
 const MARK = 'pezlie:complete';
@@ -33,13 +40,14 @@ const CHANGES = [
   ['Show', 'assigned'], ['Show', 'all'], ['Order', 'age'], ['Order', 'name'], ['Order', 'cp'],
   ['Color', 'age'], ['Color', 'status'], ['Show', 'unassigned'], ['Show', 'all'],
 ];
-const TOTAL = 5 + CHANGES.length;
+const TOTAL = 9 + CHANGES.length;
 let step = 0;
 const misses = [];
+const cases = [];
 function report(name, ms, gate, note = '') {
   const ok = gate === null || ms <= gate;
   if (!ok) misses.push(name);
-  console.log(`${String(++step).padStart(2)}/${TOTAL}  ${ok ? 'PASS' : 'MISS'}  ${name.padEnd(34)} `
+  console.log(`${String(++step).padStart(2)}/${TOTAL}  ${ok ? 'PASS' : 'MISS'}  ${name.padEnd(42)} `
     + `${ms.toFixed(1).padStart(8)} ms${gate === null ? '' : `  (gate ${gate} ms)`}${note}`);
 }
 
@@ -93,6 +101,7 @@ try {
 
   const { page } = await open();
   const firstPaint = await page.evaluate((mark) => performance.getEntriesByName(mark)[0].startTime, MARK);
+  cases.push(summarize('first paint', [firstPaint]));
   report('first paint, every code point', firstPaint, GATES.firstPaintMs,
          firstPaint <= GATES.firstPaintTargetMs ? '' : `  target ${GATES.firstPaintTargetMs} ms not met`);
   const t = await page.evaluate(() => {
@@ -152,33 +161,56 @@ try {
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
     frames.sort((a, b) => a - b);
     const at = (q) => frames[Math.min(frames.length - 1, Math.floor(q * frames.length))];
+    cases.push(summarize(`frame, ${where}`, frames), summarize(`frame p95, ${where}`, [at(0.95)]));
     report(`median frame, ${where}`, at(0.5), GATES.medianFrameMs, `  ${frames.length} frames`);
     report(`95th percentile frame, ${where}`, at(0.95), GATES.p95FrameMs, `  worst ${frames.at(-1).toFixed(1)} ms`);
   };
   await panAndZoom('whole wall');
+
+  // From an action to the last complete frame before the wall goes quiet: a
+  // hover can also clear the hovered cell, whose frame lands first.
+  const untilQuiet = async (act) => {
+    const before = await page.evaluate((mark) => {
+      window.__t0 = performance.now();
+      return performance.getEntriesByName(mark).length;
+    }, MARK);
+    await act();
+    return page.evaluate(([mark, before]) => new Promise((resolve, reject) => {
+      const check = () => {
+        const marks = performance.getEntriesByName(mark);
+        const now = performance.now();
+        if (marks.length > before && now - marks.at(-1).startTime > 300) resolve(marks.at(-1).startTime - window.__t0);
+        else if (now - window.__t0 > 60_000) reject(new Error('the wall never settled'));
+        else requestAnimationFrame(check);
+      };
+      requestAnimationFrame(check);
+    }), [MARK, before]);
+  };
+  const hovers = [];
+  const leaves = [];
+  for (const row of (await page.locator('.wall-legend-row').all()).slice(0, HOVERS)) {
+    hovers.push(await untilQuiet(() => row.hover()));
+    leaves.push(await untilQuiet(() => page.mouse.move(cx, cy)));
+  }
+  for (const [name, runs] of [['legend hover', hovers], ['legend leave', leaves]]) {
+    const c = summarize(`${name}, whole wall`, runs);
+    cases.push(c);
+    report(`${name}, whole wall, median`, c.median, GATES.changeMs, `  ${runs.length} rows, worst ${Math.max(...runs).toFixed(1)} ms`);
+  }
+
+  await choose(page, 'Color', 'age');
+  await settle();
+  await panAndZoom('whole wall, by age');
+  await choose(page, 'Color', 'status');
+  await settle();
   // In until cells are past tile size, where each renderer draws every cell itself.
   for (let i = 0; i < 40; i++) { await page.mouse.wheel(0, -200); await page.waitForTimeout(30); }
   await settle();
   await panAndZoom('close');
 
   for (const [label, value] of CHANGES) {
-    const ms = await page.evaluate(([label, value, mark]) => new Promise((resolve, reject) => {
-      const row = [...document.querySelectorAll('label.wall-side__row')]
-        .find((l) => l.firstChild?.textContent?.trim() === label);
-      const select = row?.querySelector('select');
-      if (!select) { reject(new Error(`no ${label} select`)); return; }
-      const before = performance.getEntriesByName(mark).length;
-      const t0 = performance.now();
-      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, value);
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-      const check = () => {
-        const marks = performance.getEntriesByName(mark);
-        if (marks.length > before) resolve(marks.at(-1).startTime - t0);
-        else if (performance.now() - t0 > 60_000) reject(new Error(`${label} ${value} never finished`));
-        else requestAnimationFrame(check);
-      };
-      requestAnimationFrame(check);
-    }), [label, value, MARK]);
+    const ms = await choose(page, label, value);
+    cases.push(summarize(`${label.toLowerCase()} ${value}`, [ms]));
     report(`${label.toLowerCase()} ${value}`, ms, GATES.changeMs);
   }
 } finally {
@@ -186,5 +218,30 @@ try {
   await vite?.close();
   api.kill();
 }
+if (OUT) {
+  writeRun(OUT, 'browser', cases, { dpr: DPR, dev: DEV, scene: SCENE, throttle: THROTTLE });
+  console.log(`wrote ${OUT}`);
+}
 console.log(misses.length ? `MISSED ${misses.length}: ${misses.join(', ')}` : 'every gate passed');
 process.exitCode = misses.length ? 1 : 0;
+
+/** Picks `value` in the sidebar's `label` select and resolves with the time to the next complete frame. */
+function choose(page, label, value) {
+  return page.evaluate(([label, value, mark]) => new Promise((resolve, reject) => {
+    const row = [...document.querySelectorAll('label.wall-side__row')]
+      .find((l) => l.firstChild?.textContent?.trim() === label);
+    const select = row?.querySelector('select');
+    if (!select) { reject(new Error(`no ${label} select`)); return; }
+    const before = performance.getEntriesByName(mark).length;
+    const t0 = performance.now();
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, value);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    const check = () => {
+      const marks = performance.getEntriesByName(mark);
+      if (marks.length > before) resolve(marks.at(-1).startTime - t0);
+      else if (performance.now() - t0 > 60_000) reject(new Error(`${label} ${value} never finished`));
+      else requestAnimationFrame(check);
+    };
+    requestAnimationFrame(check);
+  }), [label, value, MARK]);
+}

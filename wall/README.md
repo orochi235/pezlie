@@ -128,7 +128,15 @@ classes are `wall-*`; colors can be overridden with custom properties under
 npm install          # at the pezlie root
 npx vitest run       # in wall/
 npx tsc --noEmit
+npm run bench -- --against main    # in wall/: drawing cost, this tree against main
 ```
+
+`bench/render.ts` times the drawing case by case over a synthetic corpus,
+into a context that does nothing, so it measures the JavaScript and not the
+rasterizing. With `--against <ref>` it alternates every case between that ref
+and this tree, and calls a change only when the pairs agree on its direction
+(sign test, p < 0.01) and it is at least 5%. `bench/compare.mjs` lines up two
+`--out` files from this or the browser bench, with less confidence.
 
 `hosts/unicode/` is a working page over every Unicode code point, and its
 `bench/` measures the wall at a million items; `hosts/emoji/` is the compact

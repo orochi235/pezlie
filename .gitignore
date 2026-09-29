@@ -16,3 +16,6 @@ hosts/emoji/dist/
 wall/dist/
 bakery/dist/
 !docs/screenshots/*.png
+
+# render.ts --against unpacks the baseline here and removes it on exit.
+wall/bench/.ab/

@@ -58,9 +58,11 @@ Python's bytecode cache keys on mtime and size. Patch in memory.
 **A top-left badge sits on a top-left caption.** Only top-right captions make
 room.
 
-**Bench numbers on this machine swing by a third.** Other sessions keep the
-load average at 20–30; the recorded gates were taken under that load. Compare
-runs taken minutes apart, not across days.
+**Bench numbers on this machine swing by a third or more.** Other sessions keep
+the load average anywhere from 20 to 300; the recorded gates were taken at
+20–30. Prove a render change with `npm run bench -- --against <ref>` in
+`wall/`, which pairs its runs; two `--out` files from different minutes
+disagree about identical code.
 
 **`_pw_npm_token: command not found`** after npm commands is shell noise from
 the work profile, not a failure.
