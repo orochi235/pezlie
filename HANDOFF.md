@@ -75,4 +75,28 @@ the work profile, not a failure.
    roadmap at the end of the million-item spec. An emoji wall small enough to
    embed in the portfolio was asked about and not decided.
 3. **Pop-in, as of the last change.** A glyph cell now turns from a colored square into a character on a faint ground gradually with size (`glyphBlend`), and the wall shows one level at a time, crossfading the whole view when the next level is ready.
-   Whether the rest is enough is the owner's call from using it.
+   Whether the rest is enough is the owner's call from using it.4. **Render fixes found by reading the code, unmeasured unless noted.** Work
+   down in order and prove each with `npm run bench -- --against main` in
+   `wall/` (legend hover in `hosts/unicode/bench/browser.mjs` for the first).
+   Items 1–4 were checked against the code; 5–8 only by a subagent.
+   1. Legend hover (`Wall.tsx`, `tiles.ts` pixel path): `highlight` and
+      `highlightTag` are in the tile scene, so a hover re-renders every tile,
+      building a string key and a `tagsOf().includes()` per cell. Look colors up
+      by state × dimmed × washed; match each tag code once. First number: hover
+      165 ms, leave 47 ms.
+   2. `ramp()` in `tint.ts` re-parses hex and builds an `rgb()` string per cell
+      for 8 possible results. Cache them per gradient. First number: 8px tiles
+      tinted by score 29–35 ms, by status 12 ms.
+   3. `draw2d.ts` copies the whole command per cell for `strokeBorder`, borders
+      or not, and `drawOverlays` builds badge geometry below badge size. Check
+      `cmd.border` first; return early from overlays.
+   4. `useLooseThumbs.ts`: every loaded thumbnail copies the map and redraws
+      the wall. Batch arrivals per frame, as `useVectorThumbs` does.
+   5. `paint.ts`: with a manifest, each cell decodes its id and looks it up in
+      a million-key object. Build a `Uint8Array` flag per store index.
+   6. `Wall.tsx`: the 2D path draws the sprite sheet from an `HTMLImageElement`.
+      Always make an `ImageBitmap`; `decode()` loose thumbnails.
+   7. `tiles.ts`: each tile render makes a new 512×512 canvas and `ImageData`,
+      writing 4 bytes per pixel. Reuse both; one `Uint32Array` store per pixel.
+   8. `draw2d.ts`: glyph cells set the font and measure text every frame.
+      Measure once per glyph and size.
