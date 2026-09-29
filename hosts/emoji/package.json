@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@weasel-js/labkit": "1.7.0",
+    "@weasel-js/labkit": "1.7.1",
     "pezlie": "0.4.2",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"

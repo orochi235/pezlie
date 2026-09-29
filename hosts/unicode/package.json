@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@weasel-js/labkit": "1.7.0",
+    "@weasel-js/labkit": "1.7.1",
     "apache-arrow": "^21.2.0",
     "pezlie": "0.4.2",
     "react": "^19.3.0",

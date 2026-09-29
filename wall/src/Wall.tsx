@@ -206,8 +206,8 @@ export function Wall<T extends Item>({
     performance.mark(COMPLETE_MARK);
   };
 
-  const loupeCapability = useMemo(() => resolveLoupe({ diameter: lensDiameter }), [lensDiameter]);
-  const loupe = useLoupe({ capability: loupeCapability, hostRef: ref, enabled: false });
+  const loupeOptions = useMemo(() => resolveLoupe({ diameter: lensDiameter }), [lensDiameter]);
+  const loupe = useLoupe({ options: loupeOptions, hostRef: ref, enabled: false });
   const lensRef = useRef<HTMLCanvasElement>(null);
 
   const order = laid.order;
@@ -341,7 +341,7 @@ export function Wall<T extends Item>({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     const dpr = window.devicePixelRatio || 1;
-    const d = loupeCapability.diameter;
+    const d = loupeOptions.diameter;
     canvas.width = d * dpr;
     canvas.height = d * dpr;
     canvas.style.width = `${d}px`;
@@ -362,7 +362,7 @@ export function Wall<T extends Item>({
       drawPaintCommand(ctx, cmd, lensSheet ? lensSheet.sheet! : sheet, palette, { ...options, offset });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loupe.visible, loupe.aim, loupe.factor, loupeCapability.diameter, compiled, facts, laid,
+  }, [loupe.visible, loupe.aim, loupe.factor, loupeOptions.diameter, compiled, facts, laid,
       rectOf, visible, cam, sheet, manifest, palette, loose, vector, highlight, caretDrawn,
       appearance, tint, gradient, stale, width, height, options, lensImages]);
 
@@ -374,7 +374,7 @@ export function Wall<T extends Item>({
       if (lensKey.current) { lensKey.current = ''; onLens(null); }
       return;
     }
-    const d = loupeCapability.diameter;
+    const d = loupeOptions.diameter;
     const positions = visiblePositions(laid, zoomAt(cam, loupe.aim, loupe.factor), {
       x: loupe.aim.x - d / 2, y: loupe.aim.y - d / 2, width: d, height: d,
     }, MAX_LENS_CELLS) ?? [];
@@ -382,7 +382,7 @@ export function Wall<T extends Item>({
     if (key === lensKey.current) return;
     lensKey.current = key;
     onLens({ positions, factor: loupe.factor });
-  }, [onLens, loupe.visible, loupe.aim, loupe.factor, loupeCapability.diameter, cam, laid]);
+  }, [onLens, loupe.visible, loupe.aim, loupe.factor, loupeOptions.diameter, cam, laid]);
 
   const hitTest = (e: { clientX: number; clientY: number; currentTarget: HTMLCanvasElement }) => {
     const [sx, sy] = clientToCanvas(e.currentTarget, e.clientX, e.clientY);
@@ -552,10 +552,10 @@ export function Wall<T extends Item>({
       {/* The peek key and the lens' wheel route through a dispatcher, which
           needs a registry; nothing above the wall is known to provide one. */}
       <WeaselProvider>
-        <LoupeGestures hostRef={ref} input={loupe.input} peekKey={loupeCapability.peekKey} />
+        <LoupeGestures hostRef={ref} input={loupe.input} peekKey={loupeOptions.peekKey} />
       </WeaselProvider>
       {loupe.visible && (
-        <LoupeBubble aim={loupe.aim} diameter={loupeCapability.diameter}>
+        <LoupeBubble aim={loupe.aim} diameter={loupeOptions.diameter}>
           <canvas ref={lensRef} className="lk-loupe__canvas" />
         </LoupeBubble>
       )}
