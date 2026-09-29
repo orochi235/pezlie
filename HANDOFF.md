@@ -78,12 +78,10 @@ the work profile, not a failure.
    Whether the rest is enough is the owner's call from using it.
 4. **Render fixes found by reading the code, unmeasured unless noted.** Work
    down in order and prove each with `npm run bench -- --against main` in
-   `wall/`. Items 3–4 were checked against the code; 5–8 only by a subagent.
+   `wall/`. Item 4 was checked against the code; 5–8 only by a subagent.
    Done: 1, legend hover (hover 190 → ~90 ms, leave 47 → ~20 ms); 2, ramp
-   swatches cached per gradient (8px tinted tiles −60%).
-   3. `draw2d.ts` copies the whole command per cell for `strokeBorder`, borders
-      or not, and `drawOverlays` builds badge geometry below badge size. Check
-      `cmd.border` first; return early from overlays.
+   swatches cached per gradient (8px tinted tiles −60%); 3, border and
+   overlay work skipped for cells without them (8px tiles −26 to −36%).
    4. `useLooseThumbs.ts`: every loaded thumbnail copies the map and redraws
       the wall. Batch arrivals per frame, as `useVectorThumbs` does.
    5. `paint.ts`: with a manifest, each cell decodes its id and looks it up in

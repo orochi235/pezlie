@@ -230,6 +230,7 @@ export function drawOverlays(ctx: CanvasRenderingContext2D,
                                     badges?: readonly BadgeArt[];
                                     strip?: readonly BadgeArt[] },
                              box: Box, options: DrawOptions) {
+  if (!cmd.captions?.length && !cmd.badges?.length && !cmd.strip?.length) return;
   const { radius, pad } = badgeGeometry(box.dw);
   const badges = cmd.badges ?? [];
   let stripX = box.dx + pad;
@@ -304,7 +305,7 @@ export function drawPaintCommand(ctx: CanvasRenderingContext2D, cmd: PaintComman
     } else {
       ctx.fillRect(dx, dy, cmd.dw, cmd.dh);
     }
-    strokeBorder(ctx, { ...cmd, ...box });
+    if (cmd.border && cmd.borderWidth > 0) strokeBorder(ctx, { ...cmd, ...box });
     if (cmd.wash) washCell(ctx, cmd.wash, box, options.washColor);
     drawOverlays(ctx, cmd, box, options);
     if (cmd.caret) strokeCaret(ctx, box, palette);
