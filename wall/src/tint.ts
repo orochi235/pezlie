@@ -34,27 +34,42 @@ function hex(value: string): [number, number, number] {
   return [parseInt(m[1]!, 16), parseInt(m[2]!, 16), parseInt(m[3]!, 16)];
 }
 
+/** Each ramp's STEPS swatches, worked out the first time the ramp is asked for. */
+const swatches = new Map<RampName, { css: string[]; styles: CellStyle[] }>();
+
+function swatchesOf(name: RampName) {
+  let held = swatches.get(name);
+  if (!held) {
+    const stops = RAMPS[name].map(hex);
+    const css = Array.from({ length: STEPS }, (_, s) => {
+      const at = (s / (STEPS - 1)) * (stops.length - 1);
+      const low = Math.floor(at);
+      const high = Math.min(low + 1, stops.length - 1);
+      const f = at - low;
+      return `rgb(${stops[low]!.map((v, i) => Math.round(v + (stops[high]![i]! - v) * f)).join(',')})`;
+    });
+    held = { css, styles: css.map((fill) => ({ fill, border: null, weight: null })) };
+    swatches.set(name, held);
+  }
+  return held;
+}
+
+const stepOf = (t: number) => Math.round(Math.max(0, Math.min(1, t)) * (STEPS - 1));
+
 /** A ramp sampled at `t`, quantized to `STEPS` swatches, interpolating between
  *  the two stops the step falls between. */
 export function ramp(t: number, name: RampName = 'ember'): string {
-  const stops = RAMPS[name].map(hex);
-  const clamped = Math.max(0, Math.min(1, t));
-  const step = Math.round(clamped * (STEPS - 1)) / (STEPS - 1);
-  const at = step * (stops.length - 1);
-  const low = Math.floor(at);
-  const high = Math.min(low + 1, stops.length - 1);
-  const f = at - low;
-  const rgb = stops[low]!.map((v, i) => Math.round(v + (stops[high]![i]! - v) * f));
-  return `rgb(${rgb.join(',')})`;
+  return swatchesOf(name).css[stepOf(t)]!;
 }
 
 /** A row's style under a tint: its state's under `status`, a ramp swatch under
- *  a measure, and `unmatched` where the measure has no value. */
+ *  a measure, and `unmatched` where the measure has no value. The swatch styles
+ *  are shared, so callers must not change them. */
 export function tintFor<T extends Item>(facts: Facts<T>, row: number, mode: string,
                                         palette: Palette,
                                         gradient: RampName = 'ember'): CellStyle {
   if (mode === STATUS) return palette.states[stateKey(facts, row)]!;
   const t = tintAt(facts, mode, row);
   if (t === null) return palette.unmatched;
-  return { fill: ramp(t, gradient), border: null, weight: null };
+  return swatchesOf(gradient).styles[stepOf(t)]!;
 }

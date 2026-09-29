@@ -78,11 +78,9 @@ the work profile, not a failure.
    Whether the rest is enough is the owner's call from using it.
 4. **Render fixes found by reading the code, unmeasured unless noted.** Work
    down in order and prove each with `npm run bench -- --against main` in
-   `wall/`. Items 2–4 were checked against the code; 5–8 only by a subagent.
-   Item 1, legend hover, is done: hover 190 → ~90 ms, leave 47 → ~20 ms.
-   2. `ramp()` in `tint.ts` re-parses hex and builds an `rgb()` string per cell
-      for 8 possible results. Cache them per gradient. First number: 8px tiles
-      tinted by score 29–35 ms, by status 12 ms.
+   `wall/`. Items 3–4 were checked against the code; 5–8 only by a subagent.
+   Done: 1, legend hover (hover 190 → ~90 ms, leave 47 → ~20 ms); 2, ramp
+   swatches cached per gradient (8px tinted tiles −60%).
    3. `draw2d.ts` copies the whole command per cell for `strokeBorder`, borders
       or not, and `drawOverlays` builds badge geometry below badge size. Check
       `cmd.border` first; return early from overlays.
