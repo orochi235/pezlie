@@ -82,9 +82,10 @@ the work profile, not a failure.
    Done: 1, legend hover (hover 190 → ~90 ms, leave 47 → ~20 ms); 2, ramp
    swatches cached per gradient (8px tinted tiles −60%); 3, border and
    overlay work skipped for cells without them (8px tiles −26 to −36%); 4,
-   loose thumbnails merged once a frame (no bench reaches it; a test counts renders).
-   5. `paint.ts`: with a manifest, each cell decodes its id and looks it up in
-      a million-key object. Build a `Uint8Array` flag per store index.
+   loose thumbnails merged once a frame (no bench reaches it; a test counts renders);
+   5, a row's sheet membership remembered per manifest (16px sheet tiles −54%,
+   frames −40%). Filling it for every row up front took 340–710 ms on a million
+   rows, so it fills as rows are drawn.
    6. `Wall.tsx`: the 2D path draws the sprite sheet from an `HTMLImageElement`.
       Always make an `ImageBitmap`; `decode()` loose thumbnails.
    7. `tiles.ts`: each tile render makes a new 512×512 canvas and `ImageData`,

@@ -86,13 +86,15 @@ interface Cache {
   rows: Map<string, Map<number, string | null>>;
   orders: Map<string, Uint32Array>;
   groups: WeakMap<object, Column>;
+  /** Per sheet manifest and row: 0 not yet asked, 1 no picture, 2 a picture. */
+  baked: WeakMap<object, Uint8Array>;
   rowOfId: Map<string, number> | null;
   byIndex: Uint32Array | null;
 }
 
 const newCache = (): Cache => ({
   sorts: new Map(), tints: new Map(), rows: new Map(), orders: new Map(),
-  groups: new WeakMap(), rowOfId: null, byIndex: null,
+  groups: new WeakMap(), baked: new WeakMap(), rowOfId: null, byIndex: null,
 });
 
 /** Everything the wall reads about the items, as columns parallel to the

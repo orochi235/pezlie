@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { isStale, sameLayout, sourceBox, staleCount, type SheetManifest } from '../src/sheet';
+import { compile } from '../src/cel';
+import { derive } from '../src/derive';
+import { bakedAt, isStale, sameLayout, sourceBox, staleCount, type SheetManifest } from '../src/sheet';
+import { SPEC, thing } from './fixture';
 
 const manifest: SheetManifest = {
   level: 32, gutter: 2, pitch: 36, cols: 2, rows: 2, count: 4, size: 72,
@@ -45,5 +48,16 @@ describe('sameLayout', () => {
   it('fails when a cell would land elsewhere', () => {
     expect(sameLayout(m, { ...m, count: 101 })).toBe(false);
     expect(sameLayout(m, { ...m, cols: 9 })).toBe(false);
+  });
+});
+
+describe('bakedAt', () => {
+  it('answers per manifest, so a new sheet is read afresh', () => {
+    const facts = derive(compile(SPEC), [thing('a', 0), thing('b', 1)]);
+    const first = { ...manifest, baked: { a: 'sha-a' } };
+    expect([bakedAt(facts, first, 0), bakedAt(facts, first, 1)]).toEqual([true, false]);
+    expect(bakedAt(facts, first, 1)).toBe(false);
+    const next = { ...manifest, baked: { a: 'sha-a', b: 'sha-b' } };
+    expect([bakedAt(facts, next, 0), bakedAt(facts, next, 1)]).toEqual([true, true]);
   });
 });

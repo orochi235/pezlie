@@ -1,3 +1,5 @@
+import type { Facts } from './derive';
+import type { Item } from './schema';
 export interface SheetManifest {
   level: number;
   gutter: number;
@@ -41,6 +43,16 @@ export function sourceBox(m: SheetManifest, index: number): SourceBox | null {
 export function hasTile(m: SheetManifest,
                         item: { id: string }): boolean {
   return m.baked[item.id] !== undefined;
+}
+
+/** Whether the sheet holds a picture of a row, remembered per manifest the
+ *  first time each row asks: reading a row's id off a column store is the
+ *  costly part, and doing it for every row up front stalls a million-row wall. */
+export function bakedAt<T extends Item>(facts: Facts<T>, m: SheetManifest, row: number): boolean {
+  let rows = facts.cache.baked.get(m);
+  if (!rows) facts.cache.baked.set(m, rows = new Uint8Array(facts.store.length));
+  if (rows[row] === 0) rows[row] = m.baked[facts.store.id(row)] !== undefined ? 2 : 1;
+  return rows[row] === 2;
 }
 
 /** Whether the sheet's picture of this item is behind the store's.

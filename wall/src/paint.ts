@@ -4,7 +4,7 @@ import { captionOf, glyphOf, markOf, stateKey, tagsOf, type Facts } from './deri
 import type { Band, Rect } from './layout';
 import type { CellStyle, Palette } from './palette';
 import type { Badge, BadgeDef, Item, Shape } from './schema';
-import { hasTile, sourceBox, type SheetManifest } from './sheet';
+import { bakedAt, sourceBox, type SheetManifest } from './sheet';
 import { STATUS, tintFor, type RampName } from './tint';
 
 export interface Appearance {
@@ -219,7 +219,7 @@ export function paintCommands<T extends Item>(input: PaintInput<T>): PaintComman
       : undefined;
 
     // Decoding an id is the costly read on a column store, so only when used.
-    const id = vector?.size || loose?.size || manifest ? facts.store.id(row) : '';
+    const id = vector?.size || loose?.size ? facts.store.id(row) : '';
     const image = vector?.get(id) ?? loose?.get(id);
     if (image) {
       out.push({ kind: 'image', dx, dy, dw, dh, image, ground,
@@ -228,7 +228,7 @@ export function paintCommands<T extends Item>(input: PaintInput<T>): PaintComman
     }
     // Drawn whenever the sheet has a tile, stale or not: freshness decides
     // whether to fetch a better one, never whether to show a picture.
-    const box = manifest && hasTile(manifest, { id }) ? sourceBox(manifest, facts.store.index(row)) : null;
+    const box = manifest && bakedAt(facts, manifest, row) ? sourceBox(manifest, facts.store.index(row)) : null;
     if (box) {
       out.push({ kind: 'sprite', dx, dy, dw, dh, ...box, ground,
                  alpha, caret: isCaret, badges, strip, captions, wash });
