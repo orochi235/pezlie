@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { compile } from '../src/cel';
 import { derive } from '../src/derive';
 import { naturalCompare } from '../src/natural';
-import { applySelection, byAxis, sortOrder, type Selection } from '../src/select';
+import { applySelection, byAxis, primeSort, sortOrder, type Selection } from '../src/select';
 import { rng } from './random';
 import { SPEC, thing, type Thing } from './fixture';
 
@@ -101,4 +101,31 @@ it('sorts once per sort, whatever else the selection changes', () => {
   applySelection(compiled, facts, { ...ALL, sort: 'score', filter: 'broken' });
   applySelection(compiled, facts, { ...ALL, sort: 'score', exclude: { group: ['north'] } });
   expect(sortOrder(facts, 'score')).toBe(first);
+});
+
+it('works a sort out a step at a time to the order sortOrder gives, and a click finishes it', () => {
+  const items = Array.from({ length: 300 }, (_, i) => thing(`n${(i * 7919) % 300}`, i));
+  const whole = sortOrder(derive(compiled, items), 'id');
+  const facts = derive(compiled, items);
+  let steps = 0;
+  while (primeSort(facts, 'id', () => true) === null) steps++;
+  expect(steps).toBeGreaterThan(2);
+  expect(Array.from(primeSort(facts, 'id', () => true)!)).toEqual(Array.from(whole));
+
+  const clicked = derive(compiled, items);
+  expect(primeSort(clicked, 'id', () => true)).toBeNull();
+  const pending = clicked.cache.pending.get('id');
+  expect(Array.from(sortOrder(clicked, 'id'))).toEqual(Array.from(whole));
+  expect(clicked.cache.pending.size).toBe(0);
+  expect(pending!.next().done).toBe(true);
+});
+
+it('drops an order begun before the cache was replaced', () => {
+  const items = [thing('b', 0), thing('a', 1)];
+  const facts = derive(compiled, items);
+  expect(primeSort(facts, 'id', () => true)).toBeNull();
+  const fresh = derive(compiled, items).cache;
+  facts.cache = fresh;
+  expect(fresh.pending.size).toBe(0);
+  expect(Array.from(sortOrder(facts, 'id'))).toEqual([1, 0]);
 });

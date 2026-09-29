@@ -32,30 +32,87 @@ const none = (v: unknown) => v === null || v === undefined;
  *  No answer sorts last whichever way the sort runs, strings compare
  *  naturally, and a tie keeps index order. */
 export function sortOrder<T extends Item>(facts: Facts<T>, key: string): Uint32Array {
+  return primeSort(facts, key, () => false)!;
+}
+
+/** Works `key`'s order out a step at a time until `stop` says to, and returns
+ *  it once it is done, else null; the next call, or `sortOrder`, carries on
+ *  from there. */
+export function primeSort<T extends Item>(facts: Facts<T>, key: string,
+                                          stop: () => boolean): Uint32Array | null {
   const def = facts.compiled.spec.sorts.find((s) => s.key === key);
   if (!def) throw new Error(`no sort named ${key}`);
-  let order = facts.cache.orders.get(key);
-  if (order) return order;
+  // Held, not re-read: a delta swaps the cache, and an order begun before it
+  // must not land in the new one.
+  const cache = facts.cache;
+  const done = cache.orders.get(key);
+  if (done) return done;
+  let steps = cache.pending.get(key);
+  if (!steps) cache.pending.set(key, steps = sortSteps(facts, key, def.desc));
+  for (;;) {
+    const step = steps.next();
+    if (step.done) {
+      cache.pending.delete(key);
+      cache.orders.set(key, step.value);
+      return step.value;
+    }
+    if (stop()) return null;
+  }
+}
 
+/** Rows handled between checks of the clock: each batch is a millisecond or two. */
+const BATCH = 100_000;
+
+function* sortSteps<T extends Item>(facts: Facts<T>, key: string,
+                                    desc: boolean): Generator<void, Uint32Array> {
   const { codes, values } = sortColumn(facts, key);
+  yield;
   const { rank, ranks } = values.every((v) => none(v) || typeof v === 'number')
-    ? rankNumbers(values as (number | null)[], def.desc)
+    ? rankNumbers(values as (number | null)[], desc)
     : values.every((v) => none(v) || typeof v === 'string')
-      ? rankStrings(values as (string | null)[], def.desc)
-      : rankValues(values, def.desc);
+      ? yield* rankStrings(values as (string | null)[], desc)
+      : rankValues(values, desc);
+  yield;
 
   const n = facts.store.length;
   const starts = new Uint32Array(ranks + 2);
-  for (let row = 0; row < n; row++) starts[rank[codes[row]!]! + 1]!++;
+  for (let row = 0; row < n; row++) {
+    starts[rank[codes[row]!]! + 1]!++;
+    if (row % BATCH === BATCH - 1) yield;
+  }
   for (let r = 1; r < starts.length; r++) starts[r]! += starts[r - 1]!;
-  order = new Uint32Array(n);
+  const order = new Uint32Array(n);
   const byIndex = rowsByIndex(facts);
+  yield;
   for (let i = 0; i < n; i++) {
     const row = byIndex[i]!;
     order[starts[rank[codes[row]!]!]!++] = row;
+    if (i % BATCH === BATCH - 1) yield;
   }
-  facts.cache.orders.set(key, order);
   return order;
+}
+
+/** Works out every sort's order in the browser's idle time, so a click on a
+ *  sort finds it ready. Returns what stops it. */
+export function primeSorts<T extends Item>(facts: Facts<T>, keys: readonly string[]): () => void {
+  let handle: number | null = null;
+  const idle = typeof requestIdleCallback === 'function';
+  const run = (deadline?: IdleDeadline) => {
+    handle = null;
+    const start = performance.now();
+    const stop = deadline ? () => deadline.timeRemaining() < 1 : () => performance.now() - start > 8;
+    for (const key of keys) {
+      if (primeSort(facts, key, stop) === null) { next(); return; }
+    }
+  };
+  const next = () => {
+    handle = idle ? requestIdleCallback(run) : window.setTimeout(run, 50);
+  };
+  next();
+  return () => {
+    if (handle === null) return;
+    if (idle) cancelIdleCallback(handle); else window.clearTimeout(handle);
+  };
 }
 
 /** Ranks by a native numeric sort, which a comparator over a million
@@ -91,15 +148,23 @@ function rankNumbers(values: readonly (number | null)[], desc: boolean): { rank:
 }
 
 /** Strings rank by one flat natural key each, compared as plain strings. */
-function rankStrings(values: readonly (string | null)[], desc: boolean): { rank: Int32Array; ranks: number } {
-  const keys = values.map((v) => (none(v) ? null : naturalKey(v!)));
+function* rankStrings(values: readonly (string | null)[],
+                      desc: boolean): Generator<void, { rank: Int32Array; ranks: number }> {
+  const keys: (string | null)[] = new Array(values.length);
+  for (let code = 0; code < values.length; code++) {
+    keys[code] = none(values[code]) ? null : naturalKey(values[code]!);
+    // Keys cost far more a value than a counting pass does a row.
+    if (code % (BATCH / 10) === BATCH / 10 - 1) yield;
+  }
   const present = Array.from(values.keys()).filter((code) => keys[code] !== null);
+  yield;
   const dir = desc ? -1 : 1;
   present.sort((a, b) => {
     const x = keys[a]!;
     const y = keys[b]!;
     return (x < y ? -1 : x > y ? 1 : 0) * dir;
   });
+  yield;
   const rank = new Int32Array(values.length);
   let ranks = 0;
   present.forEach((code, i) => {

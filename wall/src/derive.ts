@@ -85,6 +85,8 @@ interface Cache {
   tints: Map<string, Float32Array>;
   rows: Map<string, Map<number, string | null>>;
   orders: Map<string, Uint32Array>;
+  /** Sort orders partway worked out, resumed by whoever asks next. */
+  pending: Map<string, Iterator<void, Uint32Array>>;
   groups: WeakMap<object, Column>;
   /** Per sheet manifest and row: 0 not yet asked, 1 no picture, 2 a picture. */
   baked: WeakMap<object, Uint8Array>;
@@ -93,7 +95,7 @@ interface Cache {
 }
 
 const newCache = (): Cache => ({
-  sorts: new Map(), tints: new Map(), rows: new Map(), orders: new Map(),
+  sorts: new Map(), tints: new Map(), rows: new Map(), orders: new Map(), pending: new Map(),
   groups: new WeakMap(), baked: new WeakMap(), rowOfId: null, byIndex: null,
 });
 

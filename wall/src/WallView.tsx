@@ -21,7 +21,7 @@ import { paramSchema, type Params } from './params';
 import { BADGE_MIN_PX, type Appearance } from './paint';
 import { centerReveal } from './reveal';
 import type { CorpusSpec, Item } from './schema';
-import { applySelection } from './select';
+import { applySelection, primeSorts } from './select';
 import { sameLayout, staleCountOf } from './sheet';
 import type { ItemStore } from './store';
 import { Sidebar, type SidebarSelection } from './Sidebar';
@@ -311,6 +311,8 @@ function WallViewBody<T extends Item>({
   const rows = useMemo(
     () => (facts ? applySelection(compiled, facts, selection) : NO_ROWS),
     [compiled, facts, selection]);
+  useEffect(() => (facts ? primeSorts(facts, compiled.spec.sorts.map((s) => s.key)) : undefined),
+            [compiled, facts]);
   // What the legend's tag rows count over: picking a tag must not zero the rest.
   const tagRows = useMemo(
     () => (facts && (selection.tags?.length ?? 0) > 0

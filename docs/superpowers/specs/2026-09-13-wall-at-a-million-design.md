@@ -1,8 +1,7 @@
 # The wall at a million items
 
-**Status: built 2026-09-13.** Every gate passes except one: re-sorting a
-million rows by name takes 260 ms against a 250 ms bar. Numbers are under
-Measured; where the build departs from the design below, the design has been
+**Status: built 2026-09-13; every gate passes as of 2026-09-29.** Numbers are
+under Measured; where the build departs from the design below, the design has been
 corrected to what was built.
 
 This is the design for making `wall` fast at 1,114,112 items, with every
@@ -97,6 +96,12 @@ counting-sorted by rank. Ties break by `index`.
 A filter, class, facet or tag change is then one linear pass over the cached
 order, writing the rows it keeps into a new `Uint32Array`.
 
+Every sort's order is worked out ahead of any click, in the browser's idle
+time (`primeSorts`), as a sequence of steps short enough to stop between. A
+click on a sort finishes whatever steps are left. The one step that cannot be
+split is the comparator sort over a string key's distinct values, about 40 ms
+for the 159,803 names.
+
 ### Layout as blocks
 
 A layout returns blocks and bands, not a rect per item. A block is a rectangle
@@ -169,27 +174,26 @@ for that one row.
 
 A production build in headless Chromium (`playwright-core` 1.63.0), 1600 by
 1000 at a device pixel ratio of 1, on an Apple M2 Max whose load average from
-other work sat between 20 and 30. `hosts/unicode/bench/browser.mjs` reproduces
-it.
+other work sat between 11 and 14, on 2026-09-29. `hosts/unicode/bench/browser.mjs`
+reproduces it.
 
 | gate | measured |
 |---|---:|
-| first paint, every code point | 731–756 ms |
+| first paint, every code point | 684–797 ms |
 | median frame, pan and zoom with the whole wall on screen | 16.7 ms |
-| 95th percentile frame | 16.8 ms |
-| show assigned, show unassigned, show all | 82–135 ms |
-| order by code point, by age | 99–125 ms |
-| color by age, by status | 100–175 ms |
-| **order by name** | **260–268 ms** |
+| 95th percentile frame | 16.7–16.8 ms |
+| hover a legend row / leave it | 86 / 21 ms |
+| show assigned, show unassigned, show all | 26–55 ms |
+| order by code point, by age, by name | 42–55 ms |
+| color by age, by status | 43–44 ms |
 
 Of first paint, the 8.1 MB gzipped feed has arrived by about 280 ms; decode,
-derive, the default sort, layout and the first tiles take the other 470. The
+derive, the default sort, layout and the first tiles take the rest. The
 Vite dev server adds about half a second to first paint.
 
-The name sort is the one miss. Its cost is one natural key per distinct name
-(159,802) and a comparator sort over them, about 150 ms of the 260. The next
-step is working sort orders out before anyone asks -- off the main thread, or
-sent by the feed as part of rules evaluated by the server.
+Before sorts were primed, ordering by name took 190–268 ms: one natural key per
+distinct name and a comparator sort over them are about 60 ms of it, and
+reading the name dictionary out of Arrow about 30 ms more.
 
 ## Not in this spec
 

@@ -59,8 +59,8 @@ Python's bytecode cache keys on mtime and size. Patch in memory.
 room.
 
 **Bench numbers on this machine swing by a third or more.** Other sessions keep
-the load average anywhere from 20 to 300; the recorded gates were taken at
-20–30. Prove a render change with `npm run bench -- --against <ref>` in
+the load average anywhere from 10 to 300; the recorded gates were taken at
+11–14. Prove a render change with `npm run bench -- --against <ref>` in
 `wall/`, which pairs its runs; two `--out` files from different minutes
 disagree about identical code.
 
@@ -69,10 +69,8 @@ the work profile, not a failure.
 
 ## Next
 
-1. **The name sort gate** (260 ms against 250): work sort orders out before
-   they are asked for, off the main thread, or have the feed send them.
-2. **Paged sheets**, then font renders, then emoji and Material Symbols — the
+1. **Paged sheets**, then font renders, then emoji and Material Symbols — the
    roadmap at the end of the million-item spec. An emoji wall small enough to
    embed in the portfolio was asked about and not decided.
-3. **Pop-in, as of the last change.** A glyph cell now turns from a colored square into a character on a faint ground gradually with size (`glyphBlend`), and the wall shows one level at a time, crossfading the whole view when the next level is ready.
+2. **Pop-in, as of the last change.** A glyph cell now turns from a colored square into a character on a faint ground gradually with size (`glyphBlend`), and the wall shows one level at a time, crossfading the whole view when the next level is ready.
    Whether the rest is enough is the owner's call from using it.
