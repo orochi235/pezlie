@@ -87,8 +87,11 @@ the work profile, not a failure.
    frames −40%). Filling it for every row up front took 340–710 ms on a million
    rows, so it fills as rows are drawn; 6, sheets loaded as `ImageBitmap`s
    (Canvas2D draws their cells 4x faster in `bench/sheet-source.mjs`; no host
-   here loads a sheet, so untimed in the wall).
-   7. `tiles.ts`: each tile render makes a new 512×512 canvas and `ImageData`,
-      writing 4 bytes per pixel. Reuse both; one `Uint32Array` store per pixel.
+   here loads a sheet, so untimed in the wall); 7, pixel tiles written into one
+   reused ImageData, a 32-bit store per pixel (1px tiles −10 to −16%).
+   7. Left of it: `tiles.ts` makes a new 512px canvas per tile render. Pooling
+      evicted ones saves about 0.16 ms a tile in headless Chromium (0.22 → 0.05),
+      roughly 5 ms of a ~90 ms hover. A pool must never hand out a canvas the
+      previous scene still stands in with. Not built.
    8. `draw2d.ts`: glyph cells set the font and measure text every frame.
       Measure once per glyph and size.

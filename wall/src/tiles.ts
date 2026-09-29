@@ -100,6 +100,17 @@ function placed(x: number, y: number, size: number, cam: View, dpr: number) {
   return { dx, dy, dw: at(x + size, cam.x, cam.scale.x) - dx, dh: at(y + size, cam.y, cam.scale.y) - dy };
 }
 
+const LITTLE_ENDIAN = new Uint8Array(new Uint32Array([1]).buffer)[0] === 1;
+
+/** One pixel tile's worth of ImageData per context, reused: putImageData
+ *  copies it out, so the next tile can write over it. */
+const scratch = new WeakMap<CanvasRenderingContext2D, ImageData>();
+function scratchFor(ctx: CanvasRenderingContext2D): ImageData {
+  let img = scratch.get(ctx);
+  if (!img) scratch.set(ctx, img = ctx.createImageData(TILE_PX, TILE_PX));
+  return img;
+}
+
 function parseColor(css: string): [number, number, number] {
   const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})([0-9a-f]{2})?$/i.exec(css.trim());
   if (hex) {
@@ -119,24 +130,22 @@ function parseColor(css: string): [number, number, number] {
 function pixelTile<T extends Item>(scene: TileScene<T>, ctx: CanvasRenderingContext2D, view: View) {
   const { compiled, facts, laid, palette, tint, gradient, highlight, highlightTag, appearance,
           stale, options } = scene;
-  const img = ctx.createImageData(TILE_PX, TILE_PX);
-  const data = img.data;
+  const img = scratchFor(ctx);
+  const data = new Uint32Array(img.data.buffer, img.data.byteOffset, TILE_PX * TILE_PX);
+  data.fill(0);
   const scale = view.scale.x;
   const side = Math.max(1, Math.round(laid.cell * scale));
   const fallback = compiled.states.findIndex(
     (s) => s.key === compiled.byPrecedence[compiled.byPrecedence.length - 1]!.key);
   const wash = parseColor(options.washColor);
-  const rgba = new Map<string, number[]>();
+  // Packed as ImageData lays a pixel out in memory, so one store writes it.
   const colorOf = (css: string, washBy: number, alpha: number) => {
-    const key = `${css}|${washBy}|${alpha}`;
-    let out = rgba.get(key);
-    if (!out) {
-      const c = parseColor(css);
-      out = [0, 1, 2].map((i) => Math.round(c[i]! + (wash[i]! - c[i]!) * washBy));
-      out.push(Math.round(alpha * 255));
-      rgba.set(key, out);
-    }
-    return out;
+    const c = parseColor(css);
+    const [r, g, b] = [0, 1, 2].map((i) => Math.round(c[i]! + (wash[i]! - c[i]!) * washBy)) as
+      [number, number, number];
+    const a = Math.round(alpha * 255);
+    return LITTLE_ENDIAN ? ((a << 24) | (b << 16) | (g << 8) | r) >>> 0
+      : ((r << 24) | (g << 16) | (b << 8) | a) >>> 0;
   };
   const plain = highlight === null && highlightTag === null && !stale && !appearance.wash;
   // A quiet cell wears a glyph once close, so far off it is the ground the
@@ -156,7 +165,7 @@ function pixelTile<T extends Item>(scene: TileScene<T>, ctx: CanvasRenderingCont
     return tint === STATUS ? style.border ?? style.fill : style.fill;
   };
   const washStrength = stale ? Math.max(STALE_WASH, appearance.washStrength) : appearance.washStrength;
-  const mixes: (number[] | undefined)[] = [];
+  const mixes: (number | undefined)[] = [];
   const mixOf = (source: number, dimmed: boolean, washed: boolean, quiet: boolean) => {
     const at = source * 8 + (dimmed ? 4 : 0) + (washed ? 2 : 0) + (quiet ? 1 : 0);
     return mixes[at] ??= colorOf(cssOf(source), washed ? washStrength : 0,
@@ -181,7 +190,7 @@ function pixelTile<T extends Item>(scene: TileScene<T>, ctx: CanvasRenderingCont
         if (i === null) continue;
         const row = laid.order[block.start + i]!;
         const s = facts.state[row]!;
-        let color: number[];
+        let color: number;
         if (plain) {
           color = column ? plainBySource[sourceOfTint(column[row]!)]! : plainBySource[s]!;
         } else {
@@ -195,13 +204,8 @@ function pixelTile<T extends Item>(scene: TileScene<T>, ctx: CanvasRenderingCont
         const y0 = Math.max(0, py0);
         const y1 = Math.min(TILE_PX, py0 + side);
         for (let y = y0; y < y1; y++) {
-          for (let x = x0; x < x1; x++) {
-            const at = (y * TILE_PX + x) * 4;
-            data[at] = color[0]!;
-            data[at + 1] = color[1]!;
-            data[at + 2] = color[2]!;
-            data[at + 3] = color[3]!;
-          }
+          const line = y * TILE_PX;
+          for (let x = x0; x < x1; x++) data[line + x] = color;
         }
       }
     }
