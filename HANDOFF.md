@@ -76,22 +76,14 @@ the work profile, not a failure.
    embed in the portfolio was asked about and not decided.
 3. **Pop-in, as of the last change.** A glyph cell now turns from a colored square into a character on a faint ground gradually with size (`glyphBlend`), and the wall shows one level at a time, crossfading the whole view when the next level is ready.
    Whether the rest is enough is the owner's call from using it.
-4. **Render fixes found by reading the code, unmeasured unless noted.** Work
-   down in order and prove each with `npm run bench -- --against main` in
-   `wall/`. Items 7–8 were found only by a subagent.
-   Done: 1, legend hover (hover 190 → ~90 ms, leave 47 → ~20 ms); 2, ramp
-   swatches cached per gradient (8px tinted tiles −60%); 3, border and
-   overlay work skipped for cells without them (8px tiles −26 to −36%); 4,
-   loose thumbnails merged once a frame (no bench reaches it; a test counts renders);
-   5, a row's sheet membership remembered per manifest (16px sheet tiles −54%,
-   frames −40%). Filling it for every row up front took 340–710 ms on a million
-   rows, so it fills as rows are drawn; 6, sheets loaded as `ImageBitmap`s
-   (Canvas2D draws their cells 4x faster in `bench/sheet-source.mjs`; no host
-   here loads a sheet, so untimed in the wall); 7, pixel tiles written into one
-   reused ImageData, a 32-bit store per pixel (1px tiles −10 to −16%).
-   7. Left of it: `tiles.ts` makes a new 512px canvas per tile render. Pooling
-      evicted ones saves about 0.16 ms a tile in headless Chromium (0.22 → 0.05),
-      roughly 5 ms of a ~90 ms hover. A pool must never hand out a canvas the
-      previous scene still stands in with. Not built.
-   8. `draw2d.ts`: glyph cells set the font and measure text every frame.
-      Measure once per glyph and size.
+4. **Two small render savings, measured and not built.** The other six fixes
+   from reading the render code are on `main` (`c5b1823`..`d64e99a`, numbers in
+   each commit). Prove any render change with `npm run bench -- --against main`
+   in `wall/`.
+   - `tiles.ts` makes a new 512px canvas per tile render. Pooling evicted ones
+     saves about 0.16 ms a tile in headless Chromium (0.22 → 0.05), roughly
+     5 ms of a ~90 ms legend hover. A pool must never hand out a canvas the
+     previous scene still stands in with.
+   - `drawGlyph` measures each glyph every frame: 0.15 ms a frame over 400
+     glyph cells (2.98 against 2.83 ms). Caching means scaling one measurement
+     across sizes, which risks the vertical placement its comment guards.
