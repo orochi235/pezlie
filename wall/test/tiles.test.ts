@@ -3,7 +3,7 @@ import { compile } from '../src/cel';
 import { derive } from '../src/derive';
 import { DEFAULT_WASH } from '../src/draw2d';
 import { gridLayout } from '../src/layout';
-import { DEFAULT_APPEARANCE } from '../src/paint';
+import { DEFAULT_APPEARANCE, STALE_WASH } from '../src/paint';
 import { defaultPalette } from '../src/palette';
 import {
   coveringTiles, FADE_MS, TILE_PX, TileCache, tileKey, tileLevel, type TileScene, type TileSurface,
@@ -205,6 +205,40 @@ describe('TileCache', () => {
     const hex = (c: string) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
     expect(px(0)).toEqual(rgb(ramp(1)));
     expect(px(2)).toEqual(hex(s.palette.unmatched.fill));
+  });
+
+  it('dims, washes and tints pixel cells as paint would', () => {
+    const cells = [thing('w', 0, { level: 1, labels: ['big'] }), thing('b', 1, { err: 'x', labels: ['big', 'old'] }),
+                   thing('i', 2, { score: 10 }), thing('o', 3, { labels: ['old'], score: null })];
+    const base = scene(cells, 2, 8);
+    const pixels = (over: Partial<TileScene<Thing>>) => {
+      const { made, make } = surfaces();
+      new TileCache({ ...base, ...over }, make).draw(fakeContext(), cam(0, 0, 1), { width: 512, height: 512 }, 1, 1000);
+      const data = (made[0]!.ctx as ReturnType<typeof fakeContext>).image!.data;
+      return cells.map((_, c) => Array.from(data.slice(c * 8, c * 8 + 4)));
+    };
+    const rgb = (css: string) => (css.startsWith('#') ? [1, 3, 5].map((i) => parseInt(css.slice(i, i + 2), 16))
+      : css.match(/\d+/g)!.map(Number));
+    const washTo = rgb(DEFAULT_WASH);
+    const mix = (css: string, by = 0, alpha = 1) =>
+      [...rgb(css).map((v, i) => Math.round(v + (washTo[i]! - v) * by)), Math.round(alpha * 255)];
+    const st = base.palette.states;
+    const [warn, broken, idle, dim] = [st.warn!.border!, st.broken!.border!, st.idle!.fill, st.idle!.fill];
+    const { dimAlpha, washStrength } = DEFAULT_APPEARANCE;
+
+    expect(pixels({ highlight: 'warn' }))
+      .toEqual([mix(warn), mix(dim, 0, dimAlpha), mix(dim, 0, dimAlpha), mix(dim, 0, dimAlpha)]);
+    expect(pixels({ highlightTag: 'big' }))
+      .toEqual([mix(warn), mix(broken), mix(dim, 0, dimAlpha), mix(dim, 0, dimAlpha)]);
+    expect(pixels({ appearance: { ...DEFAULT_APPEARANCE, wash: true } }))
+      .toEqual([mix(warn), mix(broken, washStrength), mix(idle), mix(idle, washStrength)]);
+    expect(pixels({ stale: true }))
+      .toEqual([warn, broken, idle, idle].map((c) => mix(c, STALE_WASH)));
+    expect(pixels({ highlightTag: 'big', tint: 'score' })).toEqual([
+      mix(ramp(0.5)), mix(ramp(0.5)), mix(dim, 0, dimAlpha), mix(dim, 0, dimAlpha)]);
+    expect(pixels({ stale: true, tint: 'score' })).toEqual([
+      mix(ramp(0.5), STALE_WASH), mix(ramp(0.5), STALE_WASH), mix(ramp(1), STALE_WASH),
+      mix(base.palette.unmatched.fill, STALE_WASH)]);
   });
 
   it('draws larger cells through paint, without badges or captions', () => {

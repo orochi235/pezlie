@@ -79,11 +79,13 @@ the work profile, not a failure.
    down in order and prove each with `npm run bench -- --against main` in
    `wall/` (legend hover in `hosts/unicode/bench/browser.mjs` for the first).
    Items 1–4 were checked against the code; 5–8 only by a subagent.
-   1. Legend hover (`Wall.tsx`, `tiles.ts` pixel path): `highlight` and
-      `highlightTag` are in the tile scene, so a hover re-renders every tile,
-      building a string key and a `tagsOf().includes()` per cell. Look colors up
-      by state × dimmed × washed; match each tag code once. First number: hover
-      165 ms, leave 47 ms.
+   1. Legend hover: **half done.** The pixel path now looks each color up
+      once per source × dimmed × washed × quiet (hover, tag hover, washed and
+      stale 1px tiles 69–81% faster in the paired bench; browser hover 190 →
+      ~90 ms, leave unchanged at 47 ms). Left: `highlight` and `highlightTag`
+      are still in the tile scene, so a hover or leave throws the tile cache
+      away and re-renders every tile; keeping the unhovered cache for the
+      leave is the obvious next step.
    2. `ramp()` in `tint.ts` re-parses hex and builds an `rgb()` string per cell
       for 8 possible results. Cache them per gradient. First number: 8px tiles
       tinted by score 29–35 ms, by status 12 ms.

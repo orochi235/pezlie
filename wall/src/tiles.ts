@@ -1,13 +1,13 @@
 import type { View } from '@weasel-js/core';
 import type { CompiledSpec } from './cel';
-import { tagsOf, tintColumn, type Facts } from './derive';
+import { tintColumn, type Facts } from './derive';
 import { drawPaintCommand, type DrawOptions } from './draw2d';
 import { indexAt, rectAt, visiblePositions, visibleSpans, type Laid } from './layout';
 import { GLYPH_MIN_PX, glyphBlend, paintCommands, STALE_WASH, type Appearance } from './paint';
 import type { Palette } from './palette';
 import type { Item } from './schema';
 import type { SheetImage, SheetManifest } from './sheet';
-import { ramp, STATUS, STEPS, tintFor, type RampName } from './tint';
+import { ramp, STATUS, STEPS, type RampName } from './tint';
 
 /** A tile's edge in pixels. */
 export const TILE_PX = 512;
@@ -144,14 +144,34 @@ function pixelTile<T extends Item>(scene: TileScene<T>, ctx: CanvasRenderingCont
   const glyphGround = compiled.spec.glyph
     ? glyphBlend(laid.cell * scale, compiled.spec.glyph.cover).ground : 1;
   const opacityOf = (quiet: boolean | undefined) => (quiet ? glyphGround : 1);
-  const byState = compiled.states.map((s) => {
-    const style = palette.states[s.key]!;
-    return colorOf(style.border ?? style.fill, 0, opacityOf(s.quiet));
-  });
+  // A cell's color depends only on where its style comes from and whether it
+  // is dimmed, washed or quiet, so each mix is worked out once.
+  const n = compiled.states.length;
+  const DIMMED = n, SWATCH = n + 1, UNMATCHED = n + 1 + STEPS;
+  const cssOf = (source: number) => {
+    const style = source < n ? palette.states[compiled.states[source]!.key]!
+      : source === DIMMED ? palette.states[compiled.states[fallback]!.key]!
+      : source === UNMATCHED ? palette.unmatched
+      : { fill: ramp((source - SWATCH) / (STEPS - 1), gradient), border: null };
+    return tint === STATUS ? style.border ?? style.fill : style.fill;
+  };
+  const washStrength = stale ? Math.max(STALE_WASH, appearance.washStrength) : appearance.washStrength;
+  const mixes: (number[] | undefined)[] = [];
+  const mixOf = (source: number, dimmed: boolean, washed: boolean, quiet: boolean) => {
+    const at = source * 8 + (dimmed ? 4 : 0) + (washed ? 2 : 0) + (quiet ? 1 : 0);
+    return mixes[at] ??= colorOf(cssOf(source), washed ? washStrength : 0,
+                                 (dimmed ? appearance.dimAlpha : 1) * opacityOf(quiet));
+  };
+  const quiet = compiled.states.map((s) => s.quiet === true);
+  const familyDim = compiled.states.map((s) => highlight !== null && s.family !== highlight);
+  const tagDim = highlightTag === null ? null
+    : facts.tags.values.map((tags) => !(tags as string[]).includes(highlightTag));
   // A ramp has STEPS swatches, so a measure is a lookup, as `tintFor` would draw it.
-  const measured = plain && tint !== STATUS ? tintColumn(facts, tint) : null;
-  const swatches = Array.from({ length: STEPS }, (_, s) => colorOf(ramp(s / (STEPS - 1), gradient), 0, 1));
-  const unmatched = colorOf(palette.unmatched.fill, 0, 1);
+  const column = tint !== STATUS ? tintColumn(facts, tint) : null;
+  const plainBySource = Array.from({ length: UNMATCHED + 1 },
+                                   (_, src) => mixOf(src, false, false, src < n && !column && quiet[src]!));
+  const sourceOfTint = (t: number) =>
+    Number.isNaN(t) ? UNMATCHED : SWATCH + Math.round(Math.max(0, Math.min(1, t)) * (STEPS - 1));
 
   for (const { block, c0, c1, r0, r1 } of visibleSpans(laid, view, { width: TILE_PX, height: TILE_PX })) {
     for (let r = r0; r <= r1; r++) {
@@ -160,23 +180,14 @@ function pixelTile<T extends Item>(scene: TileScene<T>, ctx: CanvasRenderingCont
         const i = indexAt(block, c, r);
         if (i === null) continue;
         const row = laid.order[block.start + i]!;
+        const s = facts.state[row]!;
         let color: number[];
-        if (measured) {
-          const t = measured[row]!;
-          color = Number.isNaN(t) ? unmatched
-            : swatches[Math.round(Math.max(0, Math.min(1, t)) * (STEPS - 1))]!;
-        } else if (plain) {
-          color = byState[facts.state[row]!]!;
+        if (plain) {
+          color = column ? plainBySource[sourceOfTint(column[row]!)]! : plainBySource[s]!;
         } else {
-          const state = compiled.states[facts.state[row]!]!;
-          const dimmed = (highlight !== null && state.family !== highlight)
-            || (highlightTag !== null && !tagsOf(facts, row).includes(highlightTag));
-          const style = dimmed ? palette.states[compiled.states[fallback]!.key]!
-            : tintFor(facts, row, tint, palette, gradient);
-          const washBy = stale ? Math.max(STALE_WASH, appearance.washStrength)
-            : appearance.wash && facts.washed[row] ? appearance.washStrength : 0;
-          color = colorOf(tint === STATUS ? style.border ?? style.fill : style.fill, washBy,
-                          (dimmed ? appearance.dimAlpha : 1) * opacityOf(state.quiet));
+          const dimmed = familyDim[s]! || (tagDim !== null && tagDim[facts.tags.codes[row]!]!);
+          color = mixOf(dimmed ? DIMMED : column ? sourceOfTint(column[row]!) : s, dimmed,
+                        stale || (appearance.wash && facts.washed[row] !== 0), quiet[s]!);
         }
         const px0 = Math.floor((block.x + c * laid.pitch - view.x) * scale);
         const x0 = Math.max(0, px0);
