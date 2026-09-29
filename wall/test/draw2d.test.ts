@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import {
-  badgeGeometry, CIRCLE_SCALE, cornerBadgesAt, DEFAULT_WASH, drawPaintCommand, type DrawOptions,
+  badgeGeometry, CIRCLE_SCALE, cornerBadgesAt, DEFAULT_WASH, drawGlyph, drawPaintCommand, type DrawOptions,
 } from '../src/draw2d';
 import type { Badge, BadgeArt } from '../src/schema';
 import type { Marks } from '../src/marks';
@@ -272,4 +272,30 @@ it('sets the strip on the badge row\'s own line and stops it short of the '
   // its disc's center.
   const [br] = cornerBadgesAt([art('br')], { dx: 0, dy: 0, ...cell });
   for (const disc of alone) expect(disc.y).toBeCloseTo(br!.cy + 2);
+});
+
+it('centers a glyph on its ink, measuring each glyph once per whole-pixel size', () => {
+  const measured: string[] = [];
+  const at: number[][] = [];
+  const ctx = {
+    save() {}, restore() {}, font: '', textAlign: '', textBaseline: '',
+    measureText(this: { font: string }, s: string) {
+      measured.push(`${this.font}|${s}`);
+      const size = Number(/(\d+(?:\.\d+)?)px/.exec(this.font)![1]);
+      return { actualBoundingBoxLeft: 0.1 * size, actualBoundingBoxRight: 0.3 * size,
+               actualBoundingBoxAscent: 0.7 * size, actualBoundingBoxDescent: 0.1 * size };
+    },
+    fillText(_: string, x: number, y: number) { at.push([x, y]); },
+  } as unknown as CanvasRenderingContext2D;
+  const box = { dx: 0, dy: 0, dw: 100, dh: 100 };
+  drawGlyph(ctx, 'Ж', box);
+  drawGlyph(ctx, 'Ж', box);
+  drawGlyph(ctx, 'Ж', { ...box, dh: 100.2 });
+  expect(measured).toHaveLength(1);
+  // (left - right) / 2 and (ascent - descent) / 2 of a 62px glyph, off the cell's middle.
+  expect(at[0]![0]).toBeCloseTo(50 - 0.1 * 62);
+  expect(at[0]![1]).toBeCloseTo(50 + 0.3 * 62);
+  drawGlyph(ctx, 'Ж', { ...box, dh: 200 });
+  expect(measured).toHaveLength(2);
+  expect(at[3]![1]).toBeCloseTo(100 + 0.3 * 124);
 });

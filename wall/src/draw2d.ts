@@ -123,12 +123,28 @@ export function drawGlyph(ctx: CanvasRenderingContext2D, glyph: string, box: Box
   // Not `middle`: WebKit and Blink place it differently, and an emoji from a
   // fallback font landed a tenth of the cell low on a phone.
   ctx.textBaseline = 'alphabetic';
-  const m = ctx.measureText(glyph);
-  const half = (a: number, b: number) => (Number.isFinite(a - b) ? (a - b) / 2 : 0);
-  ctx.fillText(glyph,
-               box.dx + box.dw / 2 + half(m.actualBoundingBoxLeft, m.actualBoundingBoxRight),
-               box.dy + box.dh / 2 + half(m.actualBoundingBoxAscent, m.actualBoundingBoxDescent));
+  const size = box.dh * GLYPH_SCALE;
+  const { dx, dy } = glyphOffset(ctx, glyph, size);
+  ctx.fillText(glyph, box.dx + box.dw / 2 + dx * size, box.dy + box.dh / 2 + dy * size);
   ctx.restore();
+}
+
+/** Where a glyph's ink centers, as a share of its font size, measured once per
+ *  glyph and whole-pixel size; the cache empties past `GLYPH_OFFSETS_MAX`. */
+const glyphOffsets = new Map<string, { dx: number; dy: number }>();
+const GLYPH_OFFSETS_MAX = 8192;
+function glyphOffset(ctx: CanvasRenderingContext2D, glyph: string, size: number) {
+  const key = `${Math.round(size)}|${glyph}`;
+  let held = glyphOffsets.get(key);
+  if (!held) {
+    const m = ctx.measureText(glyph);
+    const half = (a: number, b: number) => (Number.isFinite(a - b) ? (a - b) / 2 / size : 0);
+    held = { dx: half(m.actualBoundingBoxLeft, m.actualBoundingBoxRight),
+             dy: half(m.actualBoundingBoxAscent, m.actualBoundingBoxDescent) };
+    if (glyphOffsets.size >= GLYPH_OFFSETS_MAX) glyphOffsets.clear();
+    glyphOffsets.set(key, held);
+  }
+  return held;
 }
 
 /** How wide a row of `count` badges runs on a cell this wide. */

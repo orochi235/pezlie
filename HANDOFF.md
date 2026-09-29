@@ -76,10 +76,3 @@ the work profile, not a failure.
    embed in the portfolio was asked about and not decided.
 3. **Pop-in, as of the last change.** A glyph cell now turns from a colored square into a character on a faint ground gradually with size (`glyphBlend`), and the wall shows one level at a time, crossfading the whole view when the next level is ready.
    Whether the rest is enough is the owner's call from using it.
-4. **One small render saving, measured and not built.** The other fixes
-   from reading the render code are on `main` (`c5b1823` onward, numbers in
-   each commit). Prove any render change with `npm run bench -- --against main`
-   in `wall/`.
-   - `drawGlyph` measures each glyph every frame: 0.15 ms a frame over 400
-     glyph cells (2.98 against 2.83 ms). Caching means scaling one measurement
-     across sizes, which risks the vertical placement its comment guards.
