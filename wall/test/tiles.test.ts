@@ -260,6 +260,24 @@ describe('TileCache', () => {
     expect(nextTiles(moved, refiltered, refiltered, make).tiles).not.toBe(unhovered);
   });
 
+  it('reuses the surfaces of a scene nothing draws from, and never those of the held unhovered one', () => {
+    const { made, make } = surfaces();
+    const base = scene(items, 1, 8);
+    const view = [cam(0, 0, 1), { width: 512, height: 512 }, 1, 1000] as const;
+    let held = nextTiles({ tiles: null, unhovered: null }, base, base, make);
+    held.tiles!.draw(fakeContext(), ...view);
+    const unhoveredSurfaces = [...made];
+    for (const highlight of ['warn', 'broken', 'noted']) {
+      held = nextTiles(held, { ...base, highlight }, base, make);
+      held.tiles!.draw(fakeContext(), ...view);
+    }
+    // Three hovers drew three scenes; the first hover's was dropped from the chain and reused.
+    expect(made.length).toBe(unhoveredSurfaces.length * 3);
+    expect(held.unhovered!.peek(tileKey(0, 0, 0))).toBe(unhoveredSurfaces[0]);
+    held = nextTiles(held, base, base, make);
+    expect(held.tiles!.peek(tileKey(0, 0, 0))).toBe(unhoveredSurfaces[0]);
+  });
+
   it('draws larger cells through paint, without badges or captions', () => {
     const s = scene(items.slice(0, 4), 64, 2);
     const { made, make } = surfaces();

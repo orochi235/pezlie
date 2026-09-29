@@ -248,6 +248,19 @@ export function renderTile<T extends Item>(scene: TileScene<T>, ctx: CanvasRende
 
 /** The wall below badge size, as square tiles at power-of-two zoom levels,
  *  rendered on demand and kept least recently used first out. */
+/** Surfaces of evicted and released tiles, per surface maker, for the next
+ *  render to draw over: a new 512px canvas costs about four times a reused one. */
+const spares = new WeakMap<MakeSurface, TileSurface[]>();
+const sparesOf = (make: MakeSurface) => {
+  let held = spares.get(make);
+  if (!held) spares.set(make, held = []);
+  return held;
+};
+const spare = (make: MakeSurface, surface: TileSurface) => {
+  const held = sparesOf(make);
+  if (held.length < MAX_TILES) held.push(surface);
+};
+
 export class TileCache<T extends Item> {
   readonly #tiles = new Map<string, TileSurface>();
   #previous: TileCache<T> | null;
@@ -283,15 +296,26 @@ export class TileCache<T extends Item> {
   }
 
   render(tile: TileRef, bornAt?: number): TileSurface {
-    const surface = this.make(TILE_PX);
+    const surface = sparesOf(this.make).pop() ?? this.make(TILE_PX);
     renderTile(this.scene, surface.ctx, tile);
     surface.bornAt = bornAt;
     this.#tiles.set(tile.key, surface);
-    for (const key of this.#tiles.keys()) {
+    for (const [key, evicted] of this.#tiles) {
       if (this.#tiles.size <= this.#room) break;
-      if (!key.startsWith(`${this.#floor}/`)) this.#tiles.delete(key);
+      if (!key.startsWith(`${this.#floor}/`)) { this.#tiles.delete(key); spare(this.make, evicted); }
     }
     return surface;
+  }
+
+  /** The scene this one stands in for until its own tiles are in. */
+  get previous(): TileCache<T> | null { return this.#previous; }
+
+  /** Hands every tile's surface to the next render. Only for a cache nothing
+   *  draws from any more, as the current scene or as another's stand-in. */
+  release() {
+    for (const surface of this.#tiles.values()) spare(this.make, surface);
+    this.#tiles.clear();
+    this.#previous = null;
   }
 
   /** The level whose tiles hold the whole wall, `FLOOR_TILES` a side at most. */
@@ -489,8 +513,12 @@ export interface SceneTiles<T extends Item> {
 export function nextTiles<T extends Item>(held: SceneTiles<T>, scene: TileScene<T>,
                                           unhovered: TileScene<T>, make: MakeSurface): SceneTiles<T> {
   if (held.tiles?.scene === scene) return held;
+  const before = [held.tiles, held.tiles?.previous, held.unhovered];
   const tiles = held.unhovered?.scene === scene ? held.unhovered
     : new TileCache(scene, make, held.tiles);
-  return { tiles, unhovered: scene === unhovered ? tiles
+  const next = { tiles, unhovered: scene === unhovered ? tiles
     : held.unhovered?.scene === unhovered ? held.unhovered : null };
+  const kept = new Set([next.tiles, next.tiles.previous, next.unhovered]);
+  for (const cache of new Set(before)) if (cache && !kept.has(cache)) cache.release();
+  return next;
 }
