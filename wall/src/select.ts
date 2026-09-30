@@ -92,16 +92,24 @@ function* sortSteps<T extends Item>(facts: Facts<T>, key: string,
   return order;
 }
 
-/** Works out every sort's order in the browser's idle time, so a click on a
- *  sort finds it ready. Returns what stops it. */
-export function primeSorts<T extends Item>(facts: Facts<T>, keys: readonly string[]): () => void {
+/** Works out every filter's and class's flags and every sort's order in the
+ *  browser's idle time, so a click finds them ready. Returns what stops it. */
+export function prime<T extends Item>(facts: Facts<T>): () => void {
+  const flagged = [...Object.keys(facts.filters).map((key) => () => facts.filters[key]),
+                   ...Object.keys(facts.classes).map((key) => () => facts.classes[key])];
+  const sorts = facts.compiled.spec.sorts.map((s) => s.key);
   let handle: number | null = null;
   const idle = typeof requestIdleCallback === 'function';
   const run = (deadline?: IdleDeadline) => {
     handle = null;
     const start = performance.now();
     const stop = deadline ? () => deadline.timeRemaining() < 1 : () => performance.now() - start > 8;
-    for (const key of keys) {
+    // A flag is a few milliseconds of work at a million rows, so one at a time.
+    while (flagged.length > 0) {
+      flagged.shift()!();
+      if (stop()) { next(); return; }
+    }
+    for (const key of sorts) {
       if (primeSort(facts, key, stop) === null) { next(); return; }
     }
   };

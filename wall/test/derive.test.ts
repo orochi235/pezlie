@@ -114,3 +114,28 @@ it('agrees with evaluating every item whole, on random corpora', () => {
     }
   });
 });
+
+it('works a filter out when first read, from the store the latest delta left', () => {
+  const plain = [thing('a', 0), thing('b', 1, { err: 'x' })];
+  const broke = [thing('a', 0, { err: 'x' }), thing('b', 1, { err: 'x' })];
+  const mended = [thing('a', 0, { err: 'x' }), thing('b', 1)];
+  const bits = (facts: ReturnType<typeof derive<Thing>>) => Array.from(facts.filters.broken!);
+
+  expect(bits(derive(compiled, plain))).toEqual([0, 1]);
+
+  const readFirst = derive(compiled, plain);
+  expect(bits(readFirst)).toEqual([0, 1]);
+  rederive(compiled, readFirst, broke, [0]);
+  expect(bits(readFirst)).toEqual([1, 1]);
+
+  const readAfter = derive(compiled, plain);
+  rederive(compiled, readAfter, broke, [0]);
+  expect(bits(readAfter)).toEqual([1, 1]);
+
+  // A delta hands on a copy of the facts, and the next delta goes to the copy.
+  const first = derive(compiled, plain);
+  rederive(compiled, first, broke, [0]);
+  const copy = { ...first };
+  rederive(compiled, copy, mended, [1]);
+  expect(bits(copy)).toEqual([1, 0]);
+});

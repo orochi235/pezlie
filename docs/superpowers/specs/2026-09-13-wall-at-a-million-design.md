@@ -97,7 +97,8 @@ A filter, class, facet or tag change is then one linear pass over the cached
 order, writing the rows it keeps into a new `Uint32Array`.
 
 Every sort's order is worked out ahead of any click, in the browser's idle
-time (`primeSorts`), as a sequence of steps short enough to stop between. A
+time (`prime`), as a sequence of steps short enough to stop between; so are
+the filters and classes, which `derive` leaves until first read. A
 click on a sort finishes whatever steps are left. The one step that cannot be
 split is the comparator sort over a string key's distinct values, about 40 ms
 for the 159,803 names.
@@ -179,7 +180,7 @@ reproduces it.
 
 | gate | measured |
 |---|---:|
-| first paint, every code point | 608–617 ms (2026-09-30, load 30–36) |
+| first paint, every code point | 515–534 ms (2026-09-30, load 22–26) |
 | median frame, pan and zoom with the whole wall on screen | 16.7 ms |
 | 95th percentile frame | 16.7–16.8 ms |
 | hover a legend row / leave it | 86 / 21 ms |

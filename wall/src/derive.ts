@@ -210,14 +210,12 @@ export function derive<T extends Item>(c: CompiledSpec<T>,
   const states = evaluateGrouped(store, rule.reads, rule.fn);
   const state = new Uint8Array(n);
   for (let row = 0; row < n; row++) state[row] = states.results[states.codes[row]!] as number;
-  const table = (rules: Record<string, Parameters<typeof flags<T>>[1]>) =>
-    Object.fromEntries(Object.entries(rules).map(([k, r]) => [k, flags(store, r)]));
-  return {
+  const facts: Facts<T> = {
     compiled: c,
     store,
     state,
-    filters: table(c.filters),
-    classes: table(c.classes),
+    filters: {},
+    classes: {},
     tags: c.tags ? asColumn(evaluateGrouped(store, c.tags.reads, c.tags), asTags)
       : { codes: new Int32Array(n), values: [[]] },
     facets: Object.fromEntries(Object.entries(c.facets).map(
@@ -225,6 +223,36 @@ export function derive<T extends Item>(c: CompiledSpec<T>,
     washed: c.washes ? flags(store, c.washes) : new Uint8Array(n),
     cache: newCache(),
   };
+  facts.filters = lazyFlags(store, c.filters);
+  facts.classes = lazyFlags(store, c.classes);
+  return facts;
+}
+
+/** Per object `lazyFlags` made: the flags worked out so far, and the store
+ *  the rest will be worked out from. Held here, not read off a `facts`: a
+ *  delta hands on a copy of the facts, and the copy gets the new store. */
+const madeFlags = new WeakMap<object, { made: Map<string, Uint8Array>; from: { store: ItemStore<Item> } }>();
+
+/** Each rule's flags, worked out the first time they are read: most filters
+ *  and classes are not needed for a first paint. */
+function lazyFlags<T extends Item>(store: ItemStore<T>,
+                                   rules: Record<string, Parameters<typeof flags<T>>[1]>):
+    Record<string, Uint8Array> {
+  const made = new Map<string, Uint8Array>();
+  const from = { store: store as ItemStore<Item> };
+  const out: Record<string, Uint8Array> = {};
+  for (const [key, rule] of Object.entries(rules)) {
+    Object.defineProperty(out, key, {
+      enumerable: true,
+      get: () => {
+        let bits = made.get(key);
+        if (!bits) made.set(key, bits = flags(from.store as ItemStore<T>, rule));
+        return bits;
+      },
+    });
+  }
+  madeFlags.set(out, { made, from });
+  return out;
 }
 
 /** Re-derives the rows a delta touched, against the new store. */
@@ -237,13 +265,18 @@ export function rederive<T extends Item>(c: CompiledSpec<T>, facts: Facts<T>,
   }
   assertIndices(store);
   facts.store = store;
+  for (const flagged of [facts.filters, facts.classes]) {
+    const held = madeFlags.get(flagged);
+    if (held) held.from.store = store as ItemStore<Item>;
+  }
   const rule = stateRule(c);
   for (const row of rows) {
     const item = store.get(row);
     unbind(item);
     facts.state[row] = rule.fn(item);
-    for (const [key, keep] of Object.entries(c.filters)) facts.filters[key]![row] = keep(item) ? 1 : 0;
-    for (const [key, member] of Object.entries(c.classes)) facts.classes[key]![row] = member(item) ? 1 : 0;
+    // Only flags already worked out; the rest will be, from the new store.
+    for (const [key, bits] of madeFlags.get(facts.filters)?.made ?? []) bits[row] = c.filters[key]!(item) ? 1 : 0;
+    for (const [key, bits] of madeFlags.get(facts.classes)?.made ?? []) bits[row] = c.classes[key]!(item) ? 1 : 0;
     if (c.tags) {
       facts.tags.codes[row] = facts.tags.values.length;
       (facts.tags.values as unknown[]).push(c.tags(item));
