@@ -179,7 +179,7 @@ reproduces it.
 
 | gate | measured |
 |---|---:|
-| first paint, every code point | 684–797 ms |
+| first paint, every code point | 608–617 ms (2026-09-30, load 30–36) |
 | median frame, pan and zoom with the whole wall on screen | 16.7 ms |
 | 95th percentile frame | 16.7–16.8 ms |
 | hover a legend row / leave it | 86 / 21 ms |

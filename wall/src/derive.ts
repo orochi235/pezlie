@@ -40,7 +40,11 @@ export function evaluateGrouped<T extends Item>(store: ItemStore<T>,
       const code = column.codes[row]!;
       codes[row] = code === ABSENT ? none : code;
     }
-    return { codes, results: [...column.values.map((v) => v ?? null), null] };
+    // One copy, not a map and then a spread: a code point column is a million values.
+    const results: unknown[] = new Array(none + 1);
+    for (let i = 0; i < none; i++) results[i] = column.values[i] ?? null;
+    results[none] = null;
+    return { codes, results };
   }
   const columns = reads.map((field) => store.column(field));
   const bases = columns.map((c) => c.values.length + 1);

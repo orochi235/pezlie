@@ -118,20 +118,31 @@ export function primeSorts<T extends Item>(facts: Facts<T>, keys: readonly strin
 /** Ranks by a native numeric sort, which a comparator over a million
  *  distinct values is several times slower than. Nulls rank last. */
 function rankNumbers(values: readonly (number | null)[], desc: boolean): { rank: Int32Array; ranks: number } {
-  // A column already in order, like a code point, needs no sort at all.
+  // A column already in order, like a code point, needs no sort at all. A bare
+  // field's column ends in a null for rows without it, so nulls are skipped.
   let rising = true;
+  let present = 0;
+  let last = -Infinity;
   for (let i = 0; i < values.length && rising; i++) {
-    rising = !none(values[i]) && (i === 0 || values[i]! > values[i - 1]!);
+    const v = values[i];
+    if (none(v)) continue;
+    rising = v! > last;
+    last = v!;
+    present++;
   }
   if (rising) {
-    const n = values.length;
-    return { rank: Int32Array.from({ length: n }, (_, i) => (desc ? n - 1 - i : i)), ranks: n };
+    const rank = new Int32Array(values.length);
+    let at = 0;
+    for (let i = 0; i < values.length; i++) {
+      rank[i] = none(values[i]) ? present : desc ? present - 1 - at++ : at++;
+    }
+    return { rank, ranks: present + 1 };
   }
-  const present = Float64Array.from(values.filter((v): v is number => !none(v)));
-  present.sort();
+  const sorted = Float64Array.from(values.filter((v): v is number => !none(v)));
+  sorted.sort();
   let distinct = 0;
-  for (let i = 0; i < present.length; i++) {
-    if (i === 0 || present[i] !== present[i - 1]) present[distinct++] = present[i]!;
+  for (let i = 0; i < sorted.length; i++) {
+    if (i === 0 || sorted[i] !== sorted[i - 1]) sorted[distinct++] = sorted[i]!;
   }
   const rank = new Int32Array(values.length);
   values.forEach((v, code) => {
@@ -140,7 +151,7 @@ function rankNumbers(values: readonly (number | null)[], desc: boolean): { rank:
     let hi = distinct - 1;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
-      if (present[mid]! < v!) lo = mid + 1; else hi = mid;
+      if (sorted[mid]! < v!) lo = mid + 1; else hi = mid;
     }
     rank[code] = desc ? distinct - 1 - lo : lo;
   });
