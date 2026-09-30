@@ -62,7 +62,9 @@ room.
 the load average anywhere from 10 to 300; the recorded gates were taken at
 11–14. Prove a render change with `npm run bench -- --against <ref>` in
 `wall/`, and a load-path change with `npx vite-node bench/load.ts --against
-<ref>` in `hosts/unicode/`; both pair their runs. Two `--out` files from
+<ref>` in `hosts/unicode/`, and a thumbnail-loading change with `node
+hosts/emoji/bench/fling.mjs --against <ref> --runs 8`; all three pair their
+runs. Two `--out` files from
 different minutes disagree about identical code. `browser.mjs` is unpaired: run
 before and after interleaved. `--profile` / `--profile-hover` write CPU
 profiles of the real page, built unminified.
@@ -83,19 +85,15 @@ after each batch of commits.
 
 ## Next
 
-1. **Fling endpoint prefetch — in progress.** After a momentum pan, nothing
-   predicts where it lands: `Wall.tsx` passes weasel's `decay.start` straight
-   through as `view.decay`, tiles only lean by last-frame motion ×
-   `LEAD_FRAMES`, and thumbnails (`WallView.tsx`, the `visible` memo) take the
-   screen plus a symmetric half-screen margin, recomputed as the camera moves.
-   Plan: first measure how long loose and vector thumbnails take to fill in
-   after a fling lands (no bench does this yet: add a fling case to
-   `browser.mjs`, zoomed in to the loose rung); then wrap `decay.start` to work
-   the landing camera out from `DecayLoopConfig` (velocity, friction,
-   minSpeed — check how `useDecayLoop` applies friction before trusting a
-   formula), fetch the landing screen's thumbnails and tiles ahead of the
-   cells flown past, and drop those fetches if the fling is grabbed or
-   redirected. Then measure again.
+1. **Fling endpoint prefetch — built** (`745aeaa`..`eba9310`, unpushed and
+   unreleased). `Wall` predicts a fling's landing (`fling.ts`) and `WallView`
+   aims thumbnail fetches there; a grab now stops a fling; loose tiles load 24
+   at a time in view order, and only for on-screen cells at the vector rung.
+   A long flick's landing fills in about 0.5–0.8 s instead of 2.6 s
+   (`hosts/emoji/bench/fling.mjs`; the numbers are in the commit messages).
+   The tile half was left unbuilt: over the tiled unicode wall every landing
+   was already complete when the camera stopped (0 ms, 5 flicks, one-off
+   probe), since a fling's slow tail gives the tiles time.
 2. **Paged sheets**, then font renders, then emoji and Material Symbols — the
    roadmap at the end of the million-item spec. An emoji wall small enough to
    embed in the portfolio was asked about and not decided.
