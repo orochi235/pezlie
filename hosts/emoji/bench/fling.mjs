@@ -1,8 +1,9 @@
 // How long a fling's landing screen takes to fill in with loose and vector
 // thumbnails, in headless Chromium, paired against another ref.
 //
-//   node hosts/emoji/bench/fling.mjs [--against main] [--runs 5] [--rung loose|vector]
-//                                    [--latency 50] [--connections 6] [--out run.json]
+//   node hosts/emoji/bench/fling.mjs [--against main | --tune NAME=VALUE] [--runs 5]
+//                                    [--rung loose|vector] [--latency 50] [--connections 6]
+//                                    [--out run.json]
 //
 // No host serves renders yet, so this one fakes them: the emoji feed is given
 // shas, and every loose tile (a magenta square) and vector render (a cyan one)
@@ -15,9 +16,10 @@
 // screen missing it over that time, in ms of a whole screen, so a fling that
 // only half empties it counts half.
 // With --against, that ref's `wall/src` (unpacked into `bench/.ab/`, removed on
-// the way out) is built beside this tree's and the runs alternate.
+// the way out) is built beside this tree's and the runs alternate. --tune does
+// the same with this tree's `wall/src` given `const NAME = VALUE` instead.
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, rmSync } from 'node:fs';
+import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync, crc32 } from 'node:zlib';
@@ -32,6 +34,8 @@ const arg = (name) => {
   return i > 0 ? process.argv[i + 1] : undefined;
 };
 const AGAINST = arg('against');
+const TUNE = arg('tune');
+if (AGAINST && TUNE) throw new Error('--against and --tune each name the other side; pass one');
 const RUNS = Number(arg('runs') ?? 5);
 const LATENCY_MS = Number(arg('latency') ?? 50);
 const CONNECTIONS = Number(arg('connections') ?? 6);
@@ -220,9 +224,24 @@ try {
     execFileSync('sh', ['-c', `git -C "${top}" archive "${sha}" wall/src | tar -x -C "${dir}"`]);
     await buildSide(sha, join(dir, 'wall'), join(abDir, `${sha}-dist`));
   }
-  await buildSide(AGAINST ? 'this tree' : 'ms', join(root, '../../wall'), join(abDir, 'here-dist'));
+  await buildSide(AGAINST || TUNE ? 'this tree' : 'ms', join(root, '../../wall'), join(abDir, 'here-dist'));
+  if (TUNE) {
+    const [name, value] = TUNE.split('=');
+    const dir = join(abDir, 'tuned');
+    cpSync(join(root, '../../wall/src'), join(dir, 'wall/src'), { recursive: true });
+    const decl = new RegExp(`^((?:export )?const ${name} = )[^;]+;`, 'm');
+    const hits = readdirSync(join(dir, 'wall/src')).filter((f) => /\.tsx?$/.test(f)).filter((f) => {
+      const path = join(dir, 'wall/src', f);
+      const text = readFileSync(path, 'utf8');
+      if (!decl.test(text)) return false;
+      writeFileSync(path, text.replace(decl, `$1${value};`));
+      return true;
+    });
+    if (hits.length !== 1) throw new Error(`--tune: ${name} is declared in ${hits.length} files of wall/src`);
+    await buildSide(TUNE, join(dir, 'wall'), join(abDir, 'tuned-dist'));
+  }
   console.log(`${CONNECTIONS} connections, ${LATENCY_MS} ms a request, ${RUNS} runs a case`
-    + `${AGAINST ? `, alternating ${sides[0].label} and this tree` : ''}`);
+    + `${sides.length > 1 ? `, alternating ${sides[0].label} and ${sides[1].label}` : ''}`);
 
   browser = await chromium.launch({ headless: true, args: ['--use-angle=metal', '--enable-gpu'] });
   const results = sides.map(() => []);
@@ -235,7 +254,7 @@ try {
         const got = await run(browser, sides[side].base, c);
         for (const k of Object.keys(got)) runs[side][k].push(got[k]);
         console.log(`${String(++step).padStart(3)}/${CASES.length * RUNS * sides.length}  `
-          + `${`${c.rung}, ${c.fling} fling`.padEnd(20)} ${sides[side].label.padEnd(9)} `
+          + `${`${c.rung}, ${c.fling} fling`.padEnd(20)} ${sides[side].label.padEnd(Math.max(...sides.map((x) => x.label.length)))} `
           + `filled ${got.fillMs.toFixed(0).padStart(5)} ms, unfilled ${got.unfilledMs.toFixed(0).padStart(5)} ms, `
           + `${String(got.served).padStart(4)} served`);
       }
@@ -249,15 +268,19 @@ try {
   console.log('');
   for (const [side, cases] of results.entries()) {
     for (const c of cases) {
-      console.log(`${sides.length > 1 ? `${sides[side].label.padEnd(10)}` : ''}${c.name.padEnd(30)} `
+      const width = Math.max(...sides.map((x) => x.label.length)) + 1;
+      console.log(`${sides.length > 1 ? `${sides[side].label.padEnd(width)}` : ''}${c.name.padEnd(30)} `
         + `median ${c.median.toFixed(0).padStart(6)} ${c.unit}`);
     }
   }
-  if (AGAINST) {
+  if (sides.length > 1) {
     console.log('');
-    for (const line of compareLines(results[0], results[1], [sides[0].label, 'this tree'], true)) console.log(line);
+    for (const line of compareLines(results[0], results[1], [sides[0].label, sides[1].label], true)) console.log(line);
   }
-  if (OUT) writeRun(OUT, 'fling', results.at(-1), { latencyMs: LATENCY_MS, connections: CONNECTIONS });
+  // Each case under its side's label when there are two.
+  const cases = results.flatMap((rs, side) => (sides.length > 1
+    ? rs.map((c) => ({ ...c, name: `${sides[side].label}: ${c.name}` })) : rs));
+  if (OUT) writeRun(OUT, 'fling', cases, { latencyMs: LATENCY_MS, connections: CONNECTIONS, tune: TUNE ?? null });
 } finally {
   await browser?.close();
   for (const s of servers) await s.close();
