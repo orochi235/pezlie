@@ -5,7 +5,7 @@ import {
 import {
   clientToCanvas, screenToWorld, viewToTransform, worldToScreen, useDecayLoop,
   viewportDragPanAction, zoomAt, WeaselProvider,
-  type InvocationCtx, type OngoingHandle, type View,
+  type DecayLoopConfig, type InvocationCtx, type OngoingHandle, type View,
 } from '@weasel-js/core';
 import { LoupeBubble, LoupeGestures, resolveLoupe, useLoupe } from '@weasel-js/labkit/loupe';
 import { adjacent, impliedCaret, type Direction } from './caret';
@@ -16,6 +16,7 @@ import { scenePainter, type SceneWallPainter } from './drawScene';
 import { positionAt, rectAt, visiblePositions, type Laid } from './layout';
 import { DEFAULT_APPEARANCE, DEFAULT_GROUND, paintCommands, type Appearance, type PaintCommand } from './paint';
 import { defaultPalette, readPalette, type Palette } from './palette';
+import { landing } from './fling';
 import { pinchPair, pinchStep, type Midpoint } from './pinch';
 import { centerReveal, panToReveal } from './reveal';
 import type { Item } from './schema';
@@ -57,6 +58,9 @@ export interface WallProps<T extends Item> {
   explicitCaret: number | null;
   onExplicitCaretChange: (position: number | null) => void;
   onPan: (next: View) => void;
+  /** Where a momentum pan will come to rest, unclamped, as it starts; null
+   *  once it stops or is grabbed. */
+  onFling?: (landing: View | null) => void;
   /** `position` is where the row sits in `laid.order`, which the hit test
    *  already knows: a host anchoring to the cell needs it to find the rect.
    *  It is only meaningful against the `laid` it came from -- a sort or a
@@ -131,7 +135,7 @@ const NOOP_MODIFIERS = { alt: false, ctrl: false, meta: false, shift: false };
 export function Wall<T extends Item>({
   compiled, facts, laid, cam, sheet, manifest, loose, vector, width, height,
   highlight, highlightTag, explicitCaret, onExplicitCaretChange,
-  onPan, onPick, onOpen, onDragStart,
+  onPan, onFling, onPick, onOpen, onDragStart,
   dragThresholdPx = DEFAULT_DRAG_THRESHOLD_PX,
   pixelScale = 1, appearance, tint, gradient, stale = false,
   sceneRenderer = false, linkedBadges, linkTarget, cssRoot = '--wall',
@@ -159,7 +163,11 @@ export function Wall<T extends Item>({
   const dragPointerRef = useRef<number | null>(null);
   const pinchAtRef = useRef<{ x: number; y: number } | null>(null);
 
-  const view = { get: () => camRef.current, set: onPan, decay: decay.start };
+  const fling = (config: DecayLoopConfig) => {
+    onFling?.(landing(camRef.current, config));
+    decay.start({ ...config, onEnd: () => { config.onEnd?.(); onFling?.(null); } });
+  };
+  const view = { get: () => camRef.current, set: onPan, decay: fling };
 
   const options: DrawOptions = useMemo(
     () => ({ marks: compiled.spec.marks ?? {}, drawMark, washColor }),
@@ -424,6 +432,8 @@ export function Wall<T extends Item>({
 
   const onPointerDown = (e: ReactPointerEvent<HTMLCanvasElement>) => {
     downRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    decay.cancel();
+    onFling?.(null);
     // A second finger makes it a pinch, which must not fight a pan underneath.
     if (downRef.current.size > 1) { endDrag({ x: 0, y: 0 }, 'cancel'); return; }
     if (e.button !== 0) return;

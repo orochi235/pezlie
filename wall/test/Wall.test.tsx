@@ -168,3 +168,29 @@ it('reports the cells under the lens while it is up, and draws them from the sha
   act(() => { fireEvent.keyUp(window, { key: 'Alt' }); });
   await waitFor(() => expect(onLens).toHaveBeenLastCalledWith(null));
 });
+
+it('says where a fling lands as it starts, and stops it when the wall is grabbed', async () => {
+  let now = 1000;
+  vi.spyOn(performance, 'now').mockImplementation(() => now);
+  const onFling = vi.fn();
+  const w = mount({ onFling });
+  const pointer = (type: 'pointerDown' | 'pointerMove' | 'pointerUp', y: number) =>
+    fireEvent[type](w.canvas, { pointerId: 1, clientX: 100, clientY: y, button: 0 });
+  pointer('pointerDown', 250);
+  for (let i = 1; i <= 5; i++) { now += 10; pointer('pointerMove', 250 - 20 * i); }
+  pointer('pointerUp', 150);
+  // Dragged up at 2 px/ms: the camera carries on down the wall.
+  const landed = onFling.mock.calls.find(([to]) => to !== null)?.[0];
+  expect(landed.x).toBeCloseTo(cam.x);
+  expect(landed.y).toBeGreaterThan(cam.y + 100);
+  const pans = () => vi.mocked(w.onPan).mock.calls.length;
+  const settle = () => new Promise((r) => setTimeout(r, 100));
+  const before = pans();
+  await act(settle);
+  expect(pans()).toBeGreaterThan(before);
+  pointer('pointerDown', 150);
+  expect(onFling).toHaveBeenLastCalledWith(null);
+  const held = pans();
+  await act(settle);
+  expect(pans()).toBe(held);
+});

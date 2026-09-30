@@ -344,13 +344,16 @@ function WallViewBody<T extends Item>({
 
   useEffect(() => { onChange?.({ slot, selection, opened }); }, [onChange, slot, selection, opened]);
 
+  const clampCam = (next: View) => (laid.bounds.w > 0 && size.width > 0 && size.height > 0
+    ? clampWallView(next, laid.bounds, size, compact ? 0 : blankPx) : next);
   // Every camera write goes through this, inertia included.
   const updateCam = (next: View) => {
-    const clamped = laid.bounds.w > 0 && size.width > 0 && size.height > 0
-      ? clampWallView(next, laid.bounds, size, compact ? 0 : blankPx) : next;
+    const clamped = clampCam(next);
     // By value: a clamp builds a new object even when its numbers stand still.
     setCam((current) => (sameView(current, clamped) ? current : clamped));
   };
+  // Where a momentum pan is headed, and the camera it left from.
+  const [fling, setFling] = useState<{ from: View; to: View } | null>(null);
   const camAnim = useViewAnimation({ get: () => camRef.current ?? IDENTITY_VIEW, set: updateCam });
 
   // Fit the wall's width and let it run off the bottom, top-left at top-left.
@@ -403,16 +406,22 @@ function WallViewBody<T extends Item>({
 
   // Only the loose and vector rungs fetch per cell, and by then few are on screen.
   // On-screen cells first, then a margin half a screen wide, fetched ahead.
+  // Through a fling: where it lands, then the screen it left, which keeps its
+  // pictures; nothing for the cells flown past, which are gone before they land.
+  // A zoom mid-fling moves the landing, so the fling is dropped from then on.
+  const flight = fling && cam && fling.to.scale.x === cam.scale.x ? fling : null;
   const visible = useMemo(() => {
-    if (!cam || !facts || level < ladder.loose) return [];
-    const on = visiblePositions(laid, cam, slice, MAX_THUMB_CELLS) ?? [];
-    const wide = visiblePositions(laid, cam, {
+    const at = flight?.to ?? cam;
+    if (!at || !facts || level < ladder.loose) return [];
+    const on = visiblePositions(laid, at, slice, MAX_THUMB_CELLS) ?? [];
+    const left = flight ? visiblePositions(laid, flight.from, slice, MAX_THUMB_CELLS) ?? [] : [];
+    const wide = visiblePositions(laid, at, {
       x: slice.x - slice.width * THUMB_OVERSCAN, y: slice.y - slice.height * THUMB_OVERSCAN,
       width: slice.width * (1 + 2 * THUMB_OVERSCAN), height: slice.height * (1 + 2 * THUMB_OVERSCAN),
     }, MAX_THUMB_CELLS) ?? [];
-    const seen = new Set(on);
-    return [...on, ...wide.filter((p) => !seen.has(p))];
-  }, [laid, cam, slice, level, facts, ladder]);
+    return [...new Set([...on, ...left, ...wide])];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [laid, flight, flight ? null : cam, slice, level, facts, ladder]);
   const visibleItems = useMemo(
     () => (facts ? visible.map((p) => facts.store.get(laid.order[p]!)) : []),
     [facts, visible, laid]);
@@ -670,6 +679,7 @@ function WallViewBody<T extends Item>({
                   tint={selection.tint} gradient={selection.gradient}
                   explicitCaret={explicitCaret} onExplicitCaretChange={setExplicitCaret}
                   onPan={(next) => { touched.current = true; updateCam(next); }}
+                  onFling={(to) => setFling(to && camRef.current ? { from: camRef.current, to: clampCam(to) } : null)}
                   onPick={(row, at, position, via) => {
                     holdGlide();
                     // A double click opens the detail view; the camera waits
