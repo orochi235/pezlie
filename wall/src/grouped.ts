@@ -113,7 +113,7 @@ function keysAlong<T extends Item>(input: LayoutInput<T>, key: GroupKey<T>) {
     return id;
   });
   const along = new Int32Array(input.rows.length);
-  input.rows.forEach((row, p) => { along[p] = codeToId[column.codes[row]!]!; });
+  for (let p = 0; p < along.length; p++) along[p] = codeToId[column.codes[input.rows[p]!]!]!;
   return { along, names: [...ids.keys()] };
 }
 
@@ -175,12 +175,19 @@ export function bandedLayout<T extends Item>(outer: GroupKey<T>, inner: GroupKey
     const iRank = Int32Array.from(i.names, (k) => innerRank.get(k)!);
 
     // One combined key per (outer, inner) pair, dense over the pairs present.
+    // Planes by blocks is a few thousand pairs, so a table, not a map per row.
     const pairs = new Map<number, number>();
+    const span = outerNames.length * innerNames.length;
+    const table = span <= 1 << 22 ? new Int32Array(span).fill(-1) : null;
     const combined = new Int32Array(input.rows.length);
     for (let p = 0; p < combined.length; p++) {
       const k = oRank[o.along[p]!]! * innerNames.length + iRank[i.along[p]!]!;
-      let id = pairs.get(k);
-      if (id === undefined) pairs.set(k, id = pairs.size);
+      let id = table ? table[k]! : pairs.get(k) ?? -1;
+      if (id < 0) {
+        id = pairs.size;
+        pairs.set(k, id);
+        if (table) table[k] = id;
+      }
       combined[p] = id;
     }
     const sortedPairs = [...pairs.entries()].sort((a, b) => a[0] - b[0]);
