@@ -189,11 +189,20 @@ try {
   };
   await panAndZoom('whole wall');
 
-  // From an action to the last complete frame before the wall goes quiet: a
-  // hover can also clear the hovered cell, whose frame lands first.
+  // From the first pointer event an action produces to the last complete frame
+  // before the wall goes quiet: a hover can also clear the hovered cell, whose
+  // frame lands first. Not from before the action: Playwright's hover() spends
+  // about 50 ms scrolling and checking before the page sees any event.
   const untilQuiet = async (act) => {
     const before = await page.evaluate((mark) => {
       window.__t0 = performance.now();
+      window.__armed = true;
+      if (!window.__clock) {
+        window.__clock = (e) => { if (window.__armed) { window.__armed = false; window.__t0 = e.timeStamp; } };
+        for (const type of ['pointermove', 'pointerover', 'pointerdown']) {
+          window.addEventListener(type, window.__clock, { capture: true });
+        }
+      }
       return performance.getEntriesByName(mark).length;
     }, MARK);
     await act();
