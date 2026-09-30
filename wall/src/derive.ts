@@ -46,6 +46,12 @@ export function evaluateGrouped<T extends Item>(store: ItemStore<T>,
     results[none] = null;
     return { codes, results };
   }
+  // One field read: its column's codes already are the groups.
+  if (reads.length === 1) {
+    const one = perValue(store, reads[0]!, fn);
+    for (let row = 0; row < n; row++) codes[row] = one.codeOf(row);
+    return { codes, results: one.results };
+  }
   const columns = reads.map((field) => store.column(field));
   const bases = columns.map((c) => c.values.length + 1);
   const product = bases.reduce((a, b) => a * b, 1);
@@ -156,11 +162,36 @@ function stateRule<T extends Item>(c: CompiledSpec<T>) {
   return { reads, fn };
 }
 
+/** `fn` once per value of one field's column, and each row's code into the
+ *  results: its column code, or one more result for rows without the field. */
+function perValue<T extends Item>(store: ItemStore<T>, read: string, fn: (item: T) => unknown) {
+  const column = store.column(read);
+  const results = column.values.map((v) => fn({ [read]: v } as unknown as T));
+  let absent = -1;
+  const codeOf = (row: number) => {
+    const code = column.codes[row]!;
+    if (code !== ABSENT) return code;
+    if (absent < 0) { absent = results.length; results.push(fn({} as T)); }
+    return absent;
+  };
+  return { column, results, codeOf };
+}
+
 function flags<T extends Item>(store: ItemStore<T>, rule: ((item: T) => unknown)
                                & { reads: string[] | null }): Uint8Array {
+  const out = new Uint8Array(store.length);
+  // One field read: straight from its codes, with no grouped codes in between.
+  if (rule.reads?.length === 1) {
+    const { column, results, codeOf } = perValue(store, rule.reads[0]!, rule);
+    const bits = Uint8Array.from(results, (r) => (r ? 1 : 0));
+    for (let row = 0; row < out.length; row++) {
+      const code = column.codes[row]!;
+      out[row] = code !== ABSENT ? bits[code]! : results[codeOf(row)] ? 1 : 0;
+    }
+    return out;
+  }
   const { codes, results } = evaluateGrouped(store, rule.reads, rule);
   const bits = results.map((r) => (r ? 1 : 0));
-  const out = new Uint8Array(store.length);
   for (let row = 0; row < out.length; row++) out[row] = bits[codes[row]!]!;
   return out;
 }

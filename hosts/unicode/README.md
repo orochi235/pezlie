@@ -33,4 +33,5 @@ npx vitest run                   # in hosts/unicode/
 node hosts/unicode/bench/arrow-trial.mjs
 node hosts/unicode/bench/browser.mjs --out run.json   # needs .venv: uv sync
 node hosts/unicode/bench/sheet-source.mjs        # <img> against ImageBitmap as a sheet source
+npx vite-node bench/load.ts --against main       # in hosts/unicode/: load-path stages, paired
 ```

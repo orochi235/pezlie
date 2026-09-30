@@ -19,3 +19,4 @@ bakery/dist/
 
 # render.ts --against unpacks the baseline here and removes it on exit.
 wall/bench/.ab/
+hosts/unicode/bench/.ab/
