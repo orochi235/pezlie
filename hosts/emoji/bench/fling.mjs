@@ -7,12 +7,13 @@
 // No host serves renders yet, so this one fakes them: the emoji feed is given
 // shas, and every loose tile (a magenta square) and vector render (a cyan one)
 // comes from a simulated HTTP/1.1 server, `--connections` requests at a time,
-// each taking `--latency` ms. Each run opens a fresh page, zooms in until the
-// wall asks for the rung, waits for the server to go idle, flings the wall up,
-// and samples the canvas until the server is idle again. "filled" is the time
-// from release until the screen holds as much of the rung's color as it
-// finally will; "unfilled" adds up the screen missing it over that time, in ms
-// of a whole screen, so a fling that only half empties it counts half.
+// each taking `--latency` ms; a request the page cancels leaves its queue.
+// Each run opens a fresh page, zooms in until the wall asks for the rung, waits
+// for the server to go idle, flicks the wall up, and samples the canvas until
+// the server is idle again. "filled" is the time from release until the screen
+// holds as much of the rung's color as it finally will; "unfilled" adds up the
+// screen missing it over that time, in ms of a whole screen, so a fling that
+// only half empties it counts half.
 // With --against, that ref's `wall/src` (unpacked into `bench/.ab/`, removed on
 // the way out) is built beside this tree's and the runs alternate.
 import { execFileSync } from 'node:child_process';
@@ -37,7 +38,7 @@ const CONNECTIONS = Number(arg('connections') ?? 6);
 const OUT = arg('out');
 const VIEWPORT = { width: 1600, height: 1000 };
 const MARK = 'pezlie:complete';
-/** Screen pixels per pointer move, ten moves ~10 ms apart. */
+/** Screen pixels per pointer move: a flick of four moves ~10 ms apart. */
 const FLINGS = { short: 30, long: 100 };
 const RUNGS = {
   loose: { url: /\/api\/thumbs\/emoji\/128\//, color: [255, 0, 255] },
@@ -87,7 +88,12 @@ function server() {
   };
   return {
     log,
-    serve(kind, answer) { queue.push({ kind, answer }); pump(); },
+    serve(kind, request, answer) { queue.push({ kind, request, answer }); pump(); },
+    /** A request the page gave up on before it was answered leaves the queue. */
+    cancel(request) {
+      const i = queue.findIndex((j) => j.request === request);
+      if (i >= 0) queue.splice(i, 1);
+    },
     idleFor: () => (active > 0 || queue.length > 0 ? 0 : performance.now() - lastBusy),
     asked: (kind) => log.filter((l) => l.kind === kind).length + queue.filter((j) => j.kind === kind).length,
   };
@@ -112,13 +118,14 @@ async function run(browser, base, { rung, fling }) {
   await context.route('**/api/**', (route) => {
     const url = route.request().url();
     if (RUNGS.loose.url.test(url)) {
-      srv.serve('loose', () => route.fulfill({ body: LOOSE, contentType: 'image/png' }));
+      srv.serve('loose', route.request(), () => route.fulfill({ body: LOOSE, contentType: 'image/png' }));
     } else if (RUNGS.vector.url.test(url)) {
-      srv.serve('vector', () => route.fulfill({ body: SVG, contentType: 'image/svg+xml' }));
+      srv.serve('vector', route.request(), () => route.fulfill({ body: SVG, contentType: 'image/svg+xml' }));
     } else {
       void route.fulfill({ status: 404 });
     }
   });
+  context.on('requestfailed', (request) => srv.cancel(request));
   try {
     const page = await context.newPage();
     page.on('pageerror', (e) => console.error(`page error: ${e.message}`));
@@ -158,7 +165,7 @@ async function run(browser, base, { rung, fling }) {
     const asked0 = srv.log.length;
     await page.mouse.move(cx, cy + 300);
     await page.mouse.down();
-    for (let i = 1; i <= 10; i++) {
+    for (let i = 1; i <= 4; i++) {
       await page.mouse.move(cx, cy + 300 - i * FLINGS[fling]);
       await page.waitForTimeout(10);
     }
