@@ -16,7 +16,7 @@ import type { DrawOptions } from './draw2d';
 import { ItemCard } from './ItemCard';
 import { gridLayout, rectAt, visibleCount, visiblePositions, type Layout } from './layout';
 import { Legend } from './Legend';
-import { DEFAULT_LADDER, levelFor, pickLevel, sheetFor, type Ladder } from './levels';
+import { DEFAULT_LADDER, levelFor, pickLevel, sheetFor, VECTOR_LEVEL, type Ladder } from './levels';
 import { paramSchema, type Params } from './params';
 import { BADGE_MIN_PX, type Appearance } from './paint';
 import { centerReveal } from './reveal';
@@ -409,26 +409,32 @@ function WallViewBody<T extends Item>({
   // Through a fling: where it lands, then the screen it left, which keeps its
   // pictures; nothing for the cells flown past, which are gone before they land.
   // A zoom mid-fling moves the landing, so the fling is dropped from then on.
+  // `near` counts the on-screen ones at the front.
   const flight = fling && cam && fling.to.scale.x === cam.scale.x ? fling : null;
-  const visible = useMemo(() => {
+  const { cells: visible, near } = useMemo(() => {
     const at = flight?.to ?? cam;
-    if (!at || !facts || level < ladder.loose) return [];
+    if (!at || !facts || level < ladder.loose) return { cells: [], near: 0 };
     const on = visiblePositions(laid, at, slice, MAX_THUMB_CELLS) ?? [];
     const left = flight ? visiblePositions(laid, flight.from, slice, MAX_THUMB_CELLS) ?? [] : [];
     const wide = visiblePositions(laid, at, {
       x: slice.x - slice.width * THUMB_OVERSCAN, y: slice.y - slice.height * THUMB_OVERSCAN,
       width: slice.width * (1 + 2 * THUMB_OVERSCAN), height: slice.height * (1 + 2 * THUMB_OVERSCAN),
     }, MAX_THUMB_CELLS) ?? [];
-    return [...new Set([...on, ...left, ...wide])];
+    const onScreen = new Set([...on, ...left]);
+    return { cells: [...new Set([...onScreen, ...wide])], near: onScreen.size };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [laid, flight, flight ? null : cam, slice, level, facts, ladder]);
   const visibleItems = useMemo(
     () => (facts ? visible.map((p) => facts.store.get(laid.order[p]!)) : []),
     [facts, visible, laid]);
   const visibleAt = useMemo(() => visibleItems.map((_, i) => i), [visibleItems]);
+  // At the vector rung a loose tile only stands in until the render lands: the
+  // margin's would take the connections ahead of the renders.
+  const looseAt = useMemo(() => (level === VECTOR_LEVEL ? visibleAt.slice(0, near) : visibleAt),
+                          [level, visibleAt, near]);
   const looseHandle = useRef<LooseHandle | null>(null);
   const vectorHandle = useRef<VectorHandle | null>(null);
-  const loose = useLooseThumbs(visibleItems, visibleAt, level, drawnSlot, urls, looseHandle,
+  const loose = useLooseThumbs(visibleItems, looseAt, level, drawnSlot, urls, looseHandle,
                                ladder.loose);
   const vector = useVectorThumbs(visibleItems, visibleAt, level, drawnSlot, urls, cellPx,
                                  vectorHandle);
@@ -453,7 +459,7 @@ function WallViewBody<T extends Item>({
     const first = Object.values(masks.sheets)[0];
     return masks.slot === drawnSlot && first ? new Set(Object.keys(first.manifest.baked)) : null;
   }, [masks, drawnSlot]);
-  const looseMasks = useLooseThumbs(visibleItems, visibleAt, level, drawnSlot,
+  const looseMasks = useLooseThumbs(visibleItems, looseAt, level, drawnSlot,
                                     masked ? maskLayer : null, undefined, ladder.loose, masked);
   const vectorMasks = useVectorThumbs(visibleItems, visibleAt, level, drawnSlot,
                                       masked ? maskLayer : null, cellPx, undefined, masked);
