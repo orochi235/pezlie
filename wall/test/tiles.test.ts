@@ -317,6 +317,25 @@ describe('TileCache', () => {
     expect(quarters.length).toBeGreaterThanOrEqual(4);
   });
 
+  it('draws the screen before the floor when the scene before holds every tile on it', () => {
+    const { make } = surfaces();
+    const base = scene(items, 32, 8);
+    const view = [cam(0, 0, 8), { width: 512, height: 512 }, 1] as const;
+    const onScreen = coveringTiles(...view)[0]!;
+    const floor = tileKey(2, 0, 0);
+    expect(onScreen.z).toBeGreaterThan(2);
+
+    const cold = new TileCache(base, make);
+    cold.draw(fakeContext(), ...view, 0);
+    expect([cold.has(floor), cold.has(onScreen.key)]).toEqual([true, false]);
+
+    const warm = new TileCache(base, make);
+    warm.draw(fakeContext(), ...view, 1000);
+    const hovered = new TileCache({ ...base, highlight: 'warn' }, make, warm);
+    hovered.draw(fakeContext(), ...view, 0);
+    expect([hovered.has(floor), hovered.has(onScreen.key)]).toEqual([false, true]);
+  });
+
   it('keeps the floor level, which holds the whole wall, past the eviction limit', () => {
     const { make } = surfaces();
     // 8 cells of 32 is 256 wide, which two tiles a side at level 2 hold.
