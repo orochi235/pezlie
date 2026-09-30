@@ -61,16 +61,43 @@ room.
 **Bench numbers on this machine swing by a third or more.** Other sessions keep
 the load average anywhere from 10 to 300; the recorded gates were taken at
 11–14. Prove a render change with `npm run bench -- --against <ref>` in
-`wall/`, which pairs its runs; two `--out` files from different minutes
-disagree about identical code.
+`wall/`, and a load-path change with `npx vite-node bench/load.ts --against
+<ref>` in `hosts/unicode/`; both pair their runs. Two `--out` files from
+different minutes disagree about identical code. `browser.mjs` is unpaired: run
+before and after interleaved. `--profile` / `--profile-hover` write CPU
+profiles of the real page, built unminified.
 
 **`_pw_npm_token: command not found`** after npm commands is shell noise from
 the work profile, not a failure.
 
+## How the owner wants performance work done
+
+Measure first, then fix, then measure again, one change per commit with the
+numbers in its message. Anything the benches cannot reach gets a small
+headless measurement before it is built, and is left unbuilt if the number is
+small (say so, with the number). Commit to `main` as you go; **do not push or
+release until asked** — releases are cut at the end of a batch
+(`vX.Y.Z` tag → `.github/workflows/release.yml`; bump the four files the last
+`publish wall to npm` commit touched). Launch `onto test` in the background
+after each batch of commits.
+
 ## Next
 
-1. **Paged sheets**, then font renders, then emoji and Material Symbols — the
+1. **Fling endpoint prefetch — in progress.** After a momentum pan, nothing
+   predicts where it lands: `Wall.tsx` passes weasel's `decay.start` straight
+   through as `view.decay`, tiles only lean by last-frame motion ×
+   `LEAD_FRAMES`, and thumbnails (`WallView.tsx`, the `visible` memo) take the
+   screen plus a symmetric half-screen margin, recomputed as the camera moves.
+   Plan: first measure how long loose and vector thumbnails take to fill in
+   after a fling lands (no bench does this yet: add a fling case to
+   `browser.mjs`, zoomed in to the loose rung); then wrap `decay.start` to work
+   the landing camera out from `DecayLoopConfig` (velocity, friction,
+   minSpeed — check how `useDecayLoop` applies friction before trusting a
+   formula), fetch the landing screen's thumbnails and tiles ahead of the
+   cells flown past, and drop those fetches if the fling is grabbed or
+   redirected. Then measure again.
+2. **Paged sheets**, then font renders, then emoji and Material Symbols — the
    roadmap at the end of the million-item spec. An emoji wall small enough to
    embed in the portfolio was asked about and not decided.
-2. **Pop-in, as of the last change.** A glyph cell now turns from a colored square into a character on a faint ground gradually with size (`glyphBlend`), and the wall shows one level at a time, crossfading the whole view when the next level is ready.
+3. **Pop-in, as of the last change.** A glyph cell now turns from a colored square into a character on a faint ground gradually with size (`glyphBlend`), and the wall shows one level at a time, crossfading the whole view when the next level is ready.
    Whether the rest is enough is the owner's call from using it.
