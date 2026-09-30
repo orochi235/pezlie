@@ -129,3 +129,12 @@ it('drops an order begun before the cache was replaced', () => {
   expect(fresh.pending.size).toBe(0);
   expect(Array.from(sortOrder(facts, 'id'))).toEqual([1, 0]);
 });
+
+it('orders a rising number column with gaps as it stands, gaps last, either way', () => {
+  const items = [thing('a', 0, { score: 1 }), thing('b', 1, { score: null }), thing('c', 2, { score: 3 }),
+                 thing('d', 3, { score: 7 })];
+  // `score` sorts descending.
+  expect(ids(items, { ...ALL, sort: 'score' })).toEqual(['d', 'c', 'a', 'b']);
+  const falling = [thing('a', 0, { score: 7 }), thing('b', 1, { score: null }), thing('c', 2, { score: 3 })];
+  expect(ids(falling, { ...ALL, sort: 'score' })).toEqual(['a', 'c', 'b']);
+});
