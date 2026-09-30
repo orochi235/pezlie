@@ -185,8 +185,11 @@ function pixelTile<T extends Item>(scene: TileScene<T>, ctx: CanvasRenderingCont
   for (const { block, c0, c1, r0, r1 } of visibleSpans(laid, view, { width: TILE_PX, height: TILE_PX })) {
     for (let r = r0; r <= r1; r++) {
       const py0 = Math.floor((block.y + r * laid.pitch - view.y) * scale);
+      // Row-major, the default, needs no per-cell lookup of where a cell's index is.
+      const rowMajor = !block.fill || block.fill === 'rows';
+      const base = r * block.cols;
       for (let c = c0; c <= c1; c++) {
-        const i = indexAt(block, c, r);
+        const i = rowMajor ? base + c < block.count ? base + c : null : indexAt(block, c, r);
         if (i === null) continue;
         const row = laid.order[block.start + i]!;
         const s = facts.state[row]!;
