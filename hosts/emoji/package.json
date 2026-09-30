@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@weasel-js/labkit": "1.7.1",
-    "pezlie": "0.4.3",
+    "pezlie": "0.4.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },
