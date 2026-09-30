@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
-import { thumbUrl, useLooseThumbs, wanted } from '../src/useLooseThumbs';
+import { MAX_IN_FLIGHT, thumbUrl, useLooseThumbs, wanted } from '../src/useLooseThumbs';
 import { defaultUrls, imageKey } from '../src/urls';
 import type { Item } from '../src/schema';
 
@@ -30,7 +30,7 @@ it('wants only visible items that have a render', () => {
 
 it('caps how many it asks for at once', () => {
   const many = Array.from({ length: 300 }, (_, i) => item(`p${i}`, i, 'x'));
-  expect(wanted(many, many.map((_, i) => i), 128).length).toBe(200);
+  expect(wanted(many, many.map((_, i) => i), 128).length).toBe(MAX_IN_FLIGHT);
 });
 
 it('keeps asking for items behind the cap once the front of the view is in hand', () => {
@@ -40,7 +40,7 @@ it('keeps asking for items behind the cap once the front of the view is in hand'
   const all = many.map((_, i) => i);
   const have = new Set(many.slice(0, 200).map(imageKey));
   const next = wanted(many, all, 128, have);
-  expect(next.length).toBe(200);
+  expect(next.length).toBe(MAX_IN_FLIGHT);
   expect(next[0]!.id).toBe('c200');
 });
 
@@ -74,7 +74,8 @@ it('refetches only the tile of the item whose sha moved', () => {
                                   { initialProps: { items: before } });
   expect(asked).toHaveLength(2);
   rerender({ items: [before[0]!, item('b', 1, 'cccccccc2')] });
-  expect(asked.slice(2)).toEqual(['/api/thumbs/naive/128/b.webp?v=cccccccc']);
+  // The old render, still loading, is dropped on the way.
+  expect(asked.slice(2).filter(Boolean)).toEqual(['/api/thumbs/naive/128/b.webp?v=cccccccc']);
 });
 
 it('takes a frame of arrivals in one update, not one per image', () => {
@@ -96,4 +97,46 @@ it('takes a frame of arrivals in one update, not one per image', () => {
   act(() => { for (const cb of frames.splice(0)) cb(0); });
   expect(result.current.size).toBe(50);
   expect(renders - before).toBe(1);
+});
+
+it('drops a tile still loading once its cell leaves the view, and asks again if it comes back', () => {
+  const asked: string[] = [];
+  vi.stubGlobal('Image', class {
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    set src(value: string) { asked.push(value); }
+  });
+  const items = [item('a', 0, 'aaaaaaaa1'), item('b', 1, 'bbbbbbbb1')];
+  const { rerender } = renderHook(({ visible }) => useLooseThumbs(items, visible, 128, 'naive', urls),
+                                  { initialProps: { visible: [0, 1] } });
+  expect(asked).toHaveLength(2);
+  rerender({ visible: [1] });
+  expect(asked.slice(2)).toEqual(['']);
+  rerender({ visible: [0, 1] });
+  expect(asked.slice(3)).toEqual(['/api/thumbs/naive/128/a.webp?v=aaaaaaaa']);
+});
+
+it('asks for the next tile as one lands, in the order of the view as it is now', () => {
+  const images: { onload: (() => void) | null; url: string }[] = [];
+  vi.stubGlobal('Image', class {
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    url = '';
+    constructor() { images.push(this); }
+    set src(value: string) { this.url = value; }
+  });
+  vi.stubGlobal('requestAnimationFrame', () => 0);
+  vi.stubGlobal('cancelAnimationFrame', () => {});
+  const many = Array.from({ length: 100 }, (_, i) => item(`n${i}`, i, `sha${i}`));
+  const forward = many.map((_, i) => i);
+  const { rerender } = renderHook(({ visible }) => useLooseThumbs(many, visible, 128, 'naive', urls),
+                                  { initialProps: { visible: forward } });
+  expect(images).toHaveLength(MAX_IN_FLIGHT);
+  // The view turns round; the loads in flight stay on it, and the next asked
+  // for is the new front.
+  rerender({ visible: [...forward].reverse() });
+  expect(images).toHaveLength(MAX_IN_FLIGHT);
+  act(() => { images[0]!.onload!(); });
+  expect(images).toHaveLength(MAX_IN_FLIGHT + 1);
+  expect(images.at(-1)!.url).toContain('/n99.webp');
 });
