@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { compile } from '../src/cel';
 import {
-  captionOf, derive, evaluateGrouped, facetOf, glyphOf, markOf, rederive, sortColumn, stateKey,
+  captionOf, countStates, countTags, derive, evaluateGrouped, facetOf, glyphOf, markOf, rederive, sortColumn, stateKey,
   tagsOf, tintAt,
 } from '../src/derive';
 import { storeFromItems } from '../src/store';
@@ -138,4 +138,16 @@ it('works a filter out when first read, from the store the latest delta left', (
   const copy = { ...first };
   rederive(compiled, copy, mended, [1]);
   expect(bits(copy)).toEqual([1, 0]);
+});
+
+it('counts the given rows per state and per tag', () => {
+  const items = [thing('a', 0), thing('b', 1, { err: 'x', labels: ['big'] }), thing('c', 2, { labels: ['big', 'old'] }),
+                 thing('d', 3, { err: 'x' })];
+  const facts = derive(compiled, items);
+  const byKey = (counts: Uint32Array) =>
+    Object.fromEntries(compiled.states.map((s, i) => [s.key, counts[i]]).filter(([, n]) => n));
+  expect(byKey(countStates(facts, [0, 1, 2, 3]))).toEqual({ idle: 2, broken: 2 });
+  expect(byKey(countStates(facts, Uint32Array.of(1)))).toEqual({ broken: 1 });
+  expect(Object.fromEntries(countTags(facts, [0, 1, 2, 3]))).toEqual({ big: 2, old: 1 });
+  expect(Object.fromEntries(countTags(facts, [2]))).toEqual({ big: 1, old: 1 });
 });

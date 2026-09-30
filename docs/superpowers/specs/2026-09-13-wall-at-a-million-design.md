@@ -180,13 +180,13 @@ reproduces it.
 
 | gate | measured |
 |---|---:|
-| first paint, every code point | 515–534 ms (2026-09-30, load 22–26) |
+| first paint, every code point | 453–513 ms (2026-09-30, load 20–30) |
 | median frame, pan and zoom with the whole wall on screen | 16.7 ms |
 | 95th percentile frame | 16.7–16.8 ms |
 | hover a legend row / leave it | 86 / 21 ms |
-| show assigned, show unassigned, show all | 26–55 ms |
-| order by code point, by age, by name | 42–55 ms |
-| color by age, by status | 43–44 ms |
+| show assigned, show unassigned, show all | 15–19 ms |
+| order by code point, by age, by name | 17–33 ms |
+| color by age, by status | 18–19 ms |
 
 Of first paint, the 8.1 MB gzipped feed has arrived by about 280 ms; decode,
 derive, the default sort, layout and the first tiles take the rest. The

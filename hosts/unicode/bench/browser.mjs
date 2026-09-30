@@ -1,6 +1,7 @@
 // The wall at a million items, measured in headless Chromium against its gates.
 //
 //   node hosts/unicode/bench/browser.mjs [--dpr 2] [--dev] [--shot wall.png] [--out run.json]
+//                                        [--profile load.cpuprofile]
 //
 // Starts the feed server and serves a production build of the page (or the
 // Vite dev server, with --dev), loads the page once to warm both, then times on
@@ -11,6 +12,7 @@
 // frame. Prints each measurement as it lands and exits nonzero on a miss;
 // --out writes them for `wall/bench/compare.mjs`.
 import { spawn } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 import { build, createServer, preview } from 'vite';
@@ -29,6 +31,10 @@ const throttleArg = process.argv.indexOf('--throttle');
 const THROTTLE = throttleArg > 0 ? Number(process.argv[throttleArg + 1]) || 1 : 1;
 const outArg = process.argv.indexOf('--out');
 const OUT = outArg > 0 ? process.argv[outArg + 1] : null;
+// A CPU profile of the measured page load, for Chrome's Performance panel. It
+// slows the load it profiles, so first paint reads high with it.
+const profileArg = process.argv.indexOf('--profile');
+const PROFILE = profileArg > 0 ? process.argv[profileArg + 1] : null;
 /** Legend rows hovered, each a run of the hover and leave cases. */
 const HOVERS = 6;
 const API_PORT = 8797;
@@ -77,7 +83,9 @@ try {
     vite = await createServer({ root, configFile, logLevel: 'warn', server: { port: 5297, strictPort: false, proxy } });
     await vite.listen();
   } else {
-    await build({ root, configFile, logLevel: 'warn', build: { outDir: `${root}dist`, emptyOutDir: true } });
+    // Unminified when profiling, so the profile names the wall's own functions.
+    await build({ root, configFile, logLevel: 'warn',
+                  build: { outDir: `${root}dist`, emptyOutDir: true, minify: !PROFILE } });
     vite = await preview({ root, configFile, logLevel: 'warn',
                            build: { outDir: `${root}dist` }, preview: { port: 5297, strictPort: false, proxy } });
   }
@@ -86,20 +94,31 @@ try {
 
   // Headless Chromium otherwise draws WebGL in SwiftShader, on the CPU.
   browser = await chromium.launch({ headless: true, args: ['--use-angle=metal', '--enable-gpu'] });
-  const open = async () => {
+  const open = async (profile = null) => {
     const context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: DPR });
     const page = await context.newPage();
     page.on('pageerror', (e) => console.error(`page error: ${e.message}`));
+    const cdp = profile ? await context.newCDPSession(page) : null;
+    if (cdp) {
+      await cdp.send('Profiler.enable');
+      await cdp.send('Profiler.setSamplingInterval', { interval: 100 });
+      await cdp.send('Profiler.start');
+    }
     await page.goto(`${base}#codepoints`);
     await page.waitForFunction((mark) => performance.getEntriesByName(mark).length > 0, MARK,
                                { timeout: 120_000, polling: 50 });
+    if (cdp) {
+      const { profile: taken } = await cdp.send('Profiler.stop');
+      writeFileSync(profile, JSON.stringify(taken));
+      console.log(`wrote a CPU profile of the load to ${profile}`);
+    }
     return { context, page };
   };
 
   const warm = await open();
   await warm.context.close();
 
-  const { page } = await open();
+  const { page } = await open(PROFILE);
   const firstPaint = await page.evaluate((mark) => performance.getEntriesByName(mark)[0].startTime, MARK);
   cases.push(summarize('first paint', [firstPaint]));
   report('first paint, every code point', firstPaint, GATES.firstPaintMs,

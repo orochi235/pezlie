@@ -2,7 +2,7 @@ import { useMemo, type CSSProperties } from 'react';
 import { FloatingPanel } from '@weasel-js/labkit';
 import { BadgeSwatch } from './BadgeSwatch';
 import type { CompiledSpec } from './cel';
-import { stateKey, tagsOf, type Facts } from './derive';
+import { countStates, countTags, type Facts } from './derive';
 import type { Badge, Item } from './schema';
 import { conditionKeys, cssVarTable, familyTable } from './states';
 import { TintScale } from './TintScale';
@@ -55,10 +55,10 @@ export function Legend<T extends Item>({
   const counts = useMemo(() => {
     const family = familyTable(states);
     const out: Record<string, number> = Object.fromEntries(keys.map((k) => [k, 0]));
-    for (const row of rows) {
-      const f = family[stateKey(facts, row)];
-      if (f !== undefined) out[f] = (out[f] ?? 0) + 1;
-    }
+    countStates(facts, rows).forEach((count, code) => {
+      const f = family[facts.compiled.states[code]!.key];
+      if (f !== undefined) out[f] = (out[f] ?? 0) + count;
+    });
     return out;
   }, [states, keys, facts, rows]);
 
@@ -66,11 +66,7 @@ export function Legend<T extends Item>({
   const tagCounts = useMemo(() => {
     const out: Record<string, number> = {};
     for (const axis of spec.tagAxes ?? []) for (const tag of axis.tags) out[tag] = 0;
-    for (const row of forTags) {
-      for (const tag of tagsOf(facts, row)) {
-        if (tag in out) out[tag] = out[tag]! + 1;
-      }
-    }
+    for (const [tag, count] of countTags(facts, forTags)) if (tag in out) out[tag] = count;
     return out;
   }, [spec.tagAxes, facts, forTags]);
 

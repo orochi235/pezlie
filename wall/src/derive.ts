@@ -291,6 +291,25 @@ export function rederive<T extends Item>(c: CompiledSpec<T>, facts: Facts<T>,
   facts.cache = newCache();
 }
 
+/** How many of `rows` are in each state, by its position in `compiled.states`. */
+export function countStates<T extends Item>(facts: Facts<T>, rows: ArrayLike<number>): Uint32Array {
+  const out = new Uint32Array(facts.compiled.states.length);
+  for (let i = 0; i < rows.length; i++) out[facts.state[rows[i]!]!]!++;
+  return out;
+}
+
+/** How many of `rows` carry each tag, counted once per distinct tag list. */
+export function countTags<T extends Item>(facts: Facts<T>, rows: ArrayLike<number>): Map<string, number> {
+  const perList = new Uint32Array(facts.tags.values.length);
+  for (let i = 0; i < rows.length; i++) perList[facts.tags.codes[rows[i]!]!]!++;
+  const out = new Map<string, number>();
+  facts.tags.values.forEach((tags, code) => {
+    if (!perList[code]) return;
+    for (const tag of tags as string[]) out.set(tag, (out.get(tag) ?? 0) + perList[code]!);
+  });
+  return out;
+}
+
 export const stateKey = <T extends Item>(facts: Facts<T>, row: number): string =>
   facts.compiled.states[facts.state[row]!]!.key;
 
