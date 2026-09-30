@@ -1,7 +1,7 @@
 // The wall at a million items, measured in headless Chromium against its gates.
 //
 //   node hosts/unicode/bench/browser.mjs [--dpr 2] [--dev] [--shot wall.png] [--out run.json]
-//                                        [--profile load.cpuprofile]
+//                                        [--profile load.cpuprofile] [--profile-hover hover.cpuprofile]
 //
 // Starts the feed server and serves a production build of the page (or the
 // Vite dev server, with --dev), loads the page once to warm both, then times on
@@ -35,6 +35,9 @@ const OUT = outArg > 0 ? process.argv[outArg + 1] : null;
 // slows the load it profiles, so first paint reads high with it.
 const profileArg = process.argv.indexOf('--profile');
 const PROFILE = profileArg > 0 ? process.argv[profileArg + 1] : null;
+// The same, over the legend hovers and leaves instead.
+const hoverProfileArg = process.argv.indexOf('--profile-hover');
+const PROFILE_HOVER = hoverProfileArg > 0 ? process.argv[hoverProfileArg + 1] : null;
 /** Legend rows hovered, each a run of the hover and leave cases. */
 const HOVERS = 6;
 const API_PORT = 8797;
@@ -85,7 +88,7 @@ try {
   } else {
     // Unminified when profiling, so the profile names the wall's own functions.
     await build({ root, configFile, logLevel: 'warn',
-                  build: { outDir: `${root}dist`, emptyOutDir: true, minify: !PROFILE } });
+                  build: { outDir: `${root}dist`, emptyOutDir: true, minify: !PROFILE && !PROFILE_HOVER } });
     vite = await preview({ root, configFile, logLevel: 'warn',
                            build: { outDir: `${root}dist` }, preview: { port: 5297, strictPort: false, proxy } });
   }
@@ -207,9 +210,20 @@ try {
   };
   const hovers = [];
   const leaves = [];
+  const hoverCdp = PROFILE_HOVER ? await page.context().newCDPSession(page) : null;
+  if (hoverCdp) {
+    await hoverCdp.send('Profiler.enable');
+    await hoverCdp.send('Profiler.setSamplingInterval', { interval: 100 });
+    await hoverCdp.send('Profiler.start');
+  }
   for (const row of (await page.locator('.wall-legend-row').all()).slice(0, HOVERS)) {
     hovers.push(await untilQuiet(() => row.hover()));
     leaves.push(await untilQuiet(() => page.mouse.move(cx, cy)));
+  }
+  if (hoverCdp) {
+    const { profile } = await hoverCdp.send('Profiler.stop');
+    writeFileSync(PROFILE_HOVER, JSON.stringify(profile));
+    console.log(`wrote a CPU profile of the hovers to ${PROFILE_HOVER}`);
   }
   for (const [name, runs] of [['legend hover', hovers], ['legend leave', leaves]]) {
     const c = summarize(`${name}, whole wall`, runs);

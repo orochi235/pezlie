@@ -198,8 +198,11 @@ function pixelTile<T extends Item>(scene: TileScene<T>, ctx: CanvasRenderingCont
           color = column ? plainBySource[sourceOfTint(column[row]!)]! : plainBySource[s]!;
         } else {
           const dimmed = familyDim[s]! || (tagDim !== null && tagDim[facts.tags.codes[row]!]!);
-          color = mixOf(dimmed ? DIMMED : column ? sourceOfTint(column[row]!) : s, dimmed,
-                        stale || (appearance.wash && facts.washed[row] !== 0), quiet[s]!);
+          const source = dimmed ? DIMMED : column ? sourceOfTint(column[row]!) : s;
+          const washed = stale || (appearance.wash && facts.washed[row] !== 0);
+          // Read inline, calling mixOf only on a miss: a call per cell showed in a hover profile.
+          color = mixes[source * 8 + (dimmed ? 4 : 0) + (washed ? 2 : 0) + (quiet[s] ? 1 : 0)]
+            ?? mixOf(source, dimmed, washed, quiet[s]!);
         }
         const px0 = Math.floor((block.x + c * laid.pitch - view.x) * scale);
         const x0 = Math.max(0, px0);
