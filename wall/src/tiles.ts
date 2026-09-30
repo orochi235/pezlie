@@ -360,22 +360,26 @@ export class TileCache<T extends Item> {
       - Math.hypot(b.x + b.size / 2 - ahead.x, b.y + b.size / 2 - ahead.y);
 
     const floor = this.#floor;
-    const wanted: TileRef[] = [];
+    const under: TileRef[] = [];
     if (z > floor) {
-      const under = new Set<string>();
+      const seen = new Set<string>();
       for (const t of tiles) {
         const step = 2 ** (z - floor);
         const f = ref(floor, Math.floor(t.tx / step), Math.floor(t.ty / step));
-        if (!under.has(f.key)) { under.add(f.key); wanted.push(f); }
+        if (!seen.has(f.key)) { seen.add(f.key); under.push(f); }
       }
     }
-    wanted.push(...[...tiles].sort(byCenter));
+    // The floor goes first so something can always stand in, unless the scene
+    // before already holds every tile on screen, as it does through a hover:
+    // then the screen goes first, and the floor after it.
+    const heldBefore = this.#previous !== null && tiles.every((t) => this.#previous!.peek(t.key));
+    const wanted: TileRef[] = [...(heldBefore ? [] : under), ...[...tiles].sort(byCenter)];
     const first = tiles.length > 0 ? tiles[0]! : null;
     const last = tiles.length > 0 ? tiles[tiles.length - 1]! : null;
     // Off screen: the level a zoom out lands on, then a margin at this level.
-    const extra: TileRef[] = [];
+    const extra: TileRef[] = heldBefore ? [...under] : [];
     if (first && last) {
-      const seen = new Set(wanted.map((t) => t.key));
+      const seen = new Set([...wanted, ...extra].map((t) => t.key));
       for (const t of tiles) {
         const up = ref(z - 1, Math.floor(t.tx / 2), Math.floor(t.ty / 2));
         if (!seen.has(up.key)) { seen.add(up.key); extra.push(up); }

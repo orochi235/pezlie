@@ -183,7 +183,7 @@ reproduces it.
 | first paint, every code point | 453–513 ms (2026-09-30, load 20–30) |
 | median frame, pan and zoom with the whole wall on screen | 16.7 ms |
 | 95th percentile frame | 16.7–16.8 ms |
-| hover a legend row / leave it | 86 / 21 ms |
+| hover a legend row / leave it, from the first pointer event | 37–39 / 20–21 ms |
 | show assigned, show unassigned, show all | 15–19 ms |
 | order by code point, by age, by name | 17–33 ms |
 | color by age, by status | 18–19 ms |
