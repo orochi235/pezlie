@@ -3,12 +3,15 @@
 //
 //   node hosts/emoji/bench/fling.mjs [--against main | --tune NAME=VALUE] [--runs 5]
 //                                    [--rung loose|vector] [--latency 50] [--connections 6]
-//                                    [--out run.json]
+//                                    [--protocol h1|h2] [--out run.json]
 //
 // No host serves renders yet, so this one fakes them: the emoji feed is given
 // shas, and every loose tile (a magenta square) and vector render (a cyan one)
 // comes from a simulated HTTP/1.1 server, `--connections` requests at a time,
 // each taking `--latency` ms; a request the page cancels leaves its queue.
+// --protocol serves the page and the squares from a real TLS server instead,
+// over HTTP/1.1 (where the browser's six connections a host are the limit) or
+// HTTP/2, so the page sees the protocol it would in production.
 // Each run opens a fresh page, zooms in until the wall asks for the rung, waits
 // for the server to go idle, flicks the wall up, and samples the canvas until
 // the server is idle again. "filled" is the time from release until the screen
@@ -19,9 +22,12 @@
 // the way out) is built beside this tree's and the runs alternate. --tune does
 // the same with this tree's `wall/src` given `const NAME = VALUE` instead.
 import { execFileSync } from 'node:child_process';
-import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { extname } from 'node:path';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createSecureServer } from 'node:http2';
+import { createServer as createHttpsServer } from 'node:https';
 import { deflateSync, crc32 } from 'node:zlib';
 import { chromium } from 'playwright-core';
 import { build, preview } from 'vite';
@@ -35,6 +41,9 @@ const arg = (name) => {
 };
 const AGAINST = arg('against');
 const TUNE = arg('tune');
+// A real TLS server in place of Playwright's routes, which hide the protocol.
+const PROTOCOL = arg('protocol');
+if (PROTOCOL && !['h1', 'h2'].includes(PROTOCOL)) throw new Error('--protocol is h1 or h2');
 if (AGAINST && TUNE) throw new Error('--against and --tune each name the other side; pass one');
 const RUNS = Number(arg('runs') ?? 5);
 const LATENCY_MS = Number(arg('latency') ?? 50);
@@ -103,6 +112,50 @@ function server() {
   };
 }
 
+/** The feed with a sha on every item, so each has a render to fetch. */
+function withShas(feed) {
+  feed.items.forEach((item, i) => { item.sha = i.toString(16).padStart(40, '0'); });
+  return feed;
+}
+
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
+                '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.ico': 'image/x-icon' };
+/** The run being served: a `--protocol` server answers renders through it. */
+let current = null;
+
+/** `outDir` and the fake renders over TLS, as `PROTOCOL`, on a free port. */
+async function realServer(outDir, tls) {
+  const handler = (req, res) => {
+    const path = decodeURIComponent(new URL(req.url, 'https://localhost').pathname);
+    const kind = RUNGS.loose.url.test(path) ? 'loose' : RUNGS.vector.url.test(path) ? 'vector' : null;
+    if (kind) {
+      const job = {};
+      let answered = false;
+      res.on('close', () => { if (!answered) current.cancel(job); });
+      current.serve(kind, job, async () => {
+        answered = true;
+        if (res.destroyed) return;
+        res.writeHead(200, { 'content-type': kind === 'loose' ? 'image/png' : 'image/svg+xml', 'cache-control': 'no-store' });
+        res.end(kind === 'loose' ? LOOSE : SVG);
+      });
+      return;
+    }
+    const file = join(outDir, path === '/' ? 'index.html' : path.slice(1));
+    if (path.startsWith('/api/') || !file.startsWith(outDir) || !existsSync(file)) {
+      res.writeHead(404);
+      res.end();
+      return;
+    }
+    const body = path === '/emoji.json'
+      ? JSON.stringify(withShas(JSON.parse(readFileSync(file, 'utf8')))) : readFileSync(file);
+    res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream' });
+    res.end(body);
+  };
+  const server = PROTOCOL === 'h2' ? createSecureServer(tls, handler) : createHttpsServer(tls, handler);
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return { url: `https://localhost:${server.address().port}/`, close: () => new Promise((r) => server.close(r)) };
+}
+
 async function waitUntil(test, timeoutMs, what) {
   const t0 = performance.now();
   while (!(await test())) {
@@ -113,13 +166,12 @@ async function waitUntil(test, timeoutMs, what) {
 
 async function run(browser, base, { rung, fling }) {
   const srv = server();
-  const context = await browser.newContext({ viewport: VIEWPORT });
-  await context.route('**/emoji.json', async (route) => {
-    const feed = await (await route.fetch()).json();
-    feed.items.forEach((item, i) => { item.sha = i.toString(16).padStart(40, '0'); });
-    await route.fulfill({ json: feed });
+  current = srv;
+  const context = await browser.newContext({ viewport: VIEWPORT, ignoreHTTPSErrors: Boolean(PROTOCOL) });
+  if (!PROTOCOL) await context.route('**/emoji.json', async (route) => {
+    await route.fulfill({ json: withShas(await (await route.fetch()).json()) });
   });
-  await context.route('**/api/**', (route) => {
+  if (!PROTOCOL) await context.route('**/api/**', (route) => {
     const url = route.request().url();
     if (RUNGS.loose.url.test(url)) {
       srv.serve('loose', route.request(), () => route.fulfill({ body: LOOSE, contentType: 'image/png' }));
@@ -129,7 +181,7 @@ async function run(browser, base, { rung, fling }) {
       void route.fulfill({ status: 404 });
     }
   });
-  context.on('requestfailed', (request) => srv.cancel(request));
+  if (!PROTOCOL) context.on('requestfailed', (request) => srv.cancel(request));
   try {
     const page = await context.newPage();
     page.on('pageerror', (e) => console.error(`page error: ${e.message}`));
@@ -191,9 +243,10 @@ async function run(browser, base, { rung, fling }) {
     const releasedAt = performance.now();
     await waitUntil(() => srv.idleFor() > 800 && performance.now() - releasedAt > 3000, 120_000,
                     'the landing to fill in');
-    const { fill, release } = await page.evaluate(() => {
+    const { fill, release, protocol } = await page.evaluate(() => {
       clearInterval(window.__sampler);
-      return { fill: window.__fill, release: window.__release };
+      const tile = performance.getEntriesByType('resource').find((e) => e.name.includes('/api/'));
+      return { fill: window.__fill, release: window.__release, protocol: tile?.nextHopProtocol || '?' };
     });
     const final = fill.slice(-3).reduce((s, [, f]) => s + f, 0) / 3;
     if (final < 0.2) throw new Error(`the landing only ever filled ${(final * 100).toFixed(0)}%`);
@@ -207,7 +260,7 @@ async function run(browser, base, { rung, fling }) {
       if (fill[i][0] <= release) continue;
       unfilled += Math.max(0, 1 - fill[i][1] / final) * (fill[i][0] - Math.max(release, fill[i - 1][0]));
     }
-    return { fillMs, unfilledMs: unfilled, served: srv.log.length - asked0, pxPerMs };
+    return { fillMs, unfilledMs: unfilled, served: srv.log.length - asked0, pxPerMs, protocol };
   } finally {
     await context.close();
   }
@@ -225,10 +278,27 @@ try {
       resolve: { alias: { '@pezlie/wall': wall } },
       build: { outDir, emptyOutDir: true },
     });
+    if (PROTOCOL) {
+      const served = await realServer(outDir, tls());
+      servers.push(served);
+      sides.push({ label, base: served.url });
+      return;
+    }
     const server = await preview({ root, configFile: join(root, 'vite.config.ts'), logLevel: 'warn',
                                    build: { outDir }, preview: { port: 5397, strictPort: false } });
     servers.push(server);
     sides.push({ label, base: server.resolvedUrls.local[0] });
+  };
+  // A throwaway self-signed pair; Chromium is told to accept it.
+  let pair = null;
+  const tls = () => {
+    if (!pair) {
+      mkdirSync(abDir, { recursive: true });
+      execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-subj', '/CN=localhost',
+                               '-keyout', join(abDir, 'key.pem'), '-out', join(abDir, 'cert.pem')], { stdio: 'ignore' });
+      pair = { key: readFileSync(join(abDir, 'key.pem')), cert: readFileSync(join(abDir, 'cert.pem')) };
+    }
+    return pair;
   };
   if (AGAINST) {
     const top = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
@@ -254,14 +324,14 @@ try {
     if (hits.length !== 1) throw new Error(`--tune: ${name} is declared in ${hits.length} files of wall/src`);
     await buildSide(TUNE, join(dir, 'wall'), join(abDir, 'tuned-dist'));
   }
-  console.log(`${CONNECTIONS} connections, ${LATENCY_MS} ms a request, ${RUNS} runs a case`
+  console.log(`${PROTOCOL ? `${PROTOCOL} over TLS, ` : ''}${CONNECTIONS} connections, ${LATENCY_MS} ms a request, ${RUNS} runs a case`
     + `${sides.length > 1 ? `, alternating ${sides[0].label} and ${sides[1].label}` : ''}`);
 
   browser = await chromium.launch({ headless: true, args: ['--use-angle=metal', '--enable-gpu'] });
   const results = sides.map(() => []);
   let step = 0;
   for (const c of CASES) {
-    const runs = sides.map(() => ({ fillMs: [], unfilledMs: [], served: [], pxPerMs: [] }));
+    const runs = sides.map(() => ({ fillMs: [], unfilledMs: [], served: [], pxPerMs: [], protocol: [] }));
     for (let r = 0; r < RUNS; r++) {
       const turn = r % 2 ? [...sides.keys()].reverse() : [...sides.keys()];
       for (const side of turn) {
@@ -270,7 +340,7 @@ try {
         console.log(`${String(++step).padStart(3)}/${CASES.length * RUNS * sides.length}  `
           + `${`${c.rung}, ${c.fling} fling`.padEnd(20)} ${sides[side].label.padEnd(Math.max(...sides.map((x) => x.label.length)))} `
           + `filled ${got.fillMs.toFixed(0).padStart(5)} ms, unfilled ${got.unfilledMs.toFixed(0).padStart(5)} ms, `
-          + `${String(got.served).padStart(4)} served, flicked at ${got.pxPerMs.toFixed(1).padStart(4)} px/ms`);
+          + `${String(got.served).padStart(4)} served, flicked at ${got.pxPerMs.toFixed(1).padStart(4)} px/ms, ${got.protocol}`);
       }
     }
     runs.forEach((rs, side) => {
@@ -294,7 +364,7 @@ try {
   // Each case under its side's label when there are two.
   const cases = results.flatMap((rs, side) => (sides.length > 1
     ? rs.map((c) => ({ ...c, name: `${sides[side].label}: ${c.name}` })) : rs));
-  if (OUT) writeRun(OUT, 'fling', cases, { latencyMs: LATENCY_MS, connections: CONNECTIONS, tune: TUNE ?? null });
+  if (OUT) writeRun(OUT, 'fling', cases, { latencyMs: LATENCY_MS, connections: CONNECTIONS, tune: TUNE ?? null, protocol: PROTOCOL ?? null });
 } finally {
   await browser?.close();
   for (const s of servers) await s.close();
