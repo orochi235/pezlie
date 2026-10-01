@@ -21,6 +21,18 @@ export interface LooseHandle {
  *  the view that asked, and a fling's landing waited behind them. */
 export const MAX_IN_FLIGHT = 24;
 
+/** The same once a tile has come over HTTP/2 or 3, which answers them side by
+ *  side instead of six at a time. Swept with `fling.mjs --tune`. */
+export const MAX_IN_FLIGHT_MULTIPLEXED = 96;
+
+/** Whether `url` was fetched over a protocol that multiplexes. Unknown --
+ *  no timing entry, or one from another origin without `Timing-Allow-Origin`
+ *  -- reads as no. */
+export function multiplexed(url: string): boolean {
+  const entry = performance.getEntriesByName(url)[0] as PerformanceResourceTiming | undefined;
+  return entry?.nextHopProtocol === 'h2' || entry?.nextHopProtocol === 'h3';
+}
+
 export function thumbUrl(urls: SlotUrls, item: Item, slot: string,
                          loose = DEFAULT_LADDER.loose): string {
   return urls.tile(slot, loose, item.id, shaVersion(item.sha));
@@ -53,7 +65,8 @@ export function wanted<T extends Item>(items: readonly T[], visible: readonly nu
  *
  *  An item already requested (loaded or in flight) at its current sha is never
  *  requested again for the same slot, so a new `visible` array each frame
- *  re-issues nothing. `MAX_IN_FLIGHT` load at once, and each one landing asks
+ *  re-issues nothing. `MAX_IN_FLIGHT` load at once (`MAX_IN_FLIGHT_MULTIPLEXED`
+ *  once the first tile proves the server multiplexes), and each one landing asks
  *  for the next in the order of the latest `visible`; a load still in flight
  *  when its cell leaves `visible` is dropped. A new sha fetches the new tile, and the old one stays
  *  on screen until it lands.
@@ -71,6 +84,8 @@ export function useLooseThumbs<T extends Item>(items: readonly T[], visible: rea
   const latest = useRef<Map<string, string>>(new Map());
   // In flight, by `imageKey`.
   const loading = useRef<Map<string, HTMLImageElement>>(new Map());
+  // Settled by the first tile to land; until then, as if over HTTP/1.1.
+  const cap = useRef<number | null>(null);
   // Only unmounting stops an image landing. Keyed to the effect instead, an
   // image finishing after the next camera move was dropped and never re-asked.
   const mounted = useRef(true);
@@ -122,7 +137,7 @@ export function useLooseThumbs<T extends Item>(items: readonly T[], visible: rea
     const { items, visible, level, slot, urls, looseLevel, only } = args.current;
     if (!urls || !mounted.current) return;
     for (const item of wanted(items, visible, level, requested.current, looseLevel, only,
-                              MAX_IN_FLIGHT - loading.current.size)) {
+                              (cap.current ?? MAX_IN_FLIGHT) - loading.current.size)) {
       const key = imageKey(item);
       requested.current.add(key);
       latest.current.set(item.id, key);
@@ -131,6 +146,7 @@ export function useLooseThumbs<T extends Item>(items: readonly T[], visible: rea
       img.onerror = () => { loading.current.delete(key); pump(); };
       img.onload = () => {
         loading.current.delete(key);
+        cap.current ??= multiplexed(img.src) ? MAX_IN_FLIGHT_MULTIPLEXED : MAX_IN_FLIGHT;
         pump();
         if (!mounted.current || latest.current.get(item.id) !== key) return;
         arrived.current.set(item.id, img);

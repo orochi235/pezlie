@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
-import { MAX_IN_FLIGHT, thumbUrl, useLooseThumbs, wanted } from '../src/useLooseThumbs';
+import { MAX_IN_FLIGHT, MAX_IN_FLIGHT_MULTIPLEXED, thumbUrl, useLooseThumbs, wanted } from '../src/useLooseThumbs';
 import { defaultUrls, imageKey } from '../src/urls';
 import type { Item } from '../src/schema';
 
@@ -139,4 +139,25 @@ it('asks for the next tile as one lands, in the order of the view as it is now',
   act(() => { images[0]!.onload!(); });
   expect(images).toHaveLength(MAX_IN_FLIGHT + 1);
   expect(images.at(-1)!.url).toContain('/n99.webp');
+});
+
+it('loads more at once once a tile is known to have come over HTTP/2', () => {
+  const images: { onload: (() => void) | null; url: string }[] = [];
+  vi.stubGlobal('Image', class {
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    url = '';
+    constructor() { images.push(this); }
+    set src(value: string) { this.url = value; }
+    get src() { return this.url; }
+  });
+  vi.stubGlobal('requestAnimationFrame', () => 0);
+  vi.stubGlobal('cancelAnimationFrame', () => {});
+  vi.spyOn(performance, 'getEntriesByName').mockImplementation(
+    () => [{ nextHopProtocol: 'h2' }] as unknown as PerformanceEntryList);
+  const many = Array.from({ length: 300 }, (_, i) => item(`h${i}`, i, `sha${i}`));
+  renderHook(() => useLooseThumbs(many, many.map((_, i) => i), 128, 'naive', urls));
+  expect(images).toHaveLength(MAX_IN_FLIGHT);
+  act(() => { images[0]!.onload!(); });
+  expect(images).toHaveLength(MAX_IN_FLIGHT_MULTIPLEXED + 1);
 });

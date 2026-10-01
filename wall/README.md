@@ -65,6 +65,12 @@ tile at that level, `SlotUrls.tile(slot, level, id, version)` — which `bakery`
 already writes for every level — rather than fetching the sheets again. The old
 picture stays until the new one lands; a tile that fails keeps it.
 
+**Serve the loose tiles over HTTP/2 if you can.** The wall loads 24 at a time,
+and 96 once the first one has come over HTTP/2 or 3, where a long fling's
+landing then spends about a quarter as long without its tiles. It reads the protocol off the tile's resource
+timing, which a browser hides for another origin unless that server sends
+`Timing-Allow-Origin`; hidden, the wall stays at 24.
+
 ## Rules a spec has to follow
 
 - **Items carry `index`, and the indices are exactly `0..n-1`.** An item's cell
