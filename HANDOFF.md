@@ -85,12 +85,16 @@ after each batch of commits.
 
 ## Next
 
-1. **Fling endpoint prefetch — built** (`745aeaa`..`eba9310`, unpushed and
-   unreleased). `Wall` predicts a fling's landing (`fling.ts`) and `WallView`
-   aims thumbnail fetches there; a grab now stops a fling; loose tiles load 24
-   at a time in view order, and only for on-screen cells at the vector rung.
-   A long flick's landing fills in about 0.5–0.8 s instead of 2.6 s
-   (`hosts/emoji/bench/fling.mjs`; the numbers are in the commit messages).
+1. **Fling endpoint prefetch — built and tuned** (`745aeaa`..`a72eb2e`, unpushed
+   and unreleased). `Wall` predicts a fling's landing (`fling.ts`) and
+   `WallView` aims thumbnail fetches there; a grab now stops a fling; loose
+   tiles load in view order, 24 at a time, or 96 once the first tile came over
+   HTTP/2 or 3; only on-screen cells get loose tiles at the vector rung; 16
+   vector renders rasterize at once. Against 0.4.4 on six connections, a long
+   flick's loose landing fills in 1.5 s instead of 5.6 s, and is without its
+   tiles for 0.5 s instead of 4.4 s (`fling.mjs`, studio, 8 runs; the sweeps are
+   in the commit messages). Numbers in commits before `0d0564c` came from a
+   flick whose speed depended on the machine; trust the later ones.
    The tile half was left unbuilt: over the tiled unicode wall every landing
    was already complete when the camera stopped (0 ms, 5 flicks, one-off
    probe), since a fling's slow tail gives the tiles time.
