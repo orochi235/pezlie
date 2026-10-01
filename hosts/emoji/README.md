@@ -17,5 +17,8 @@ pinned sha256, and writes `public/emoji.json`; `dev` and `build` run it first.
 **Bench.** `node hosts/emoji/bench/fling.mjs [--against main]` times how long a
 flicked wall's landing takes to fill with loose and vector thumbnails. No host
 serves those yet, so it gives the feed shas and serves plain squares from a
-simulated HTTP/1.1 server (`--connections`, `--latency`); the header has the
-rest. Use `--runs 8` or more: `compare.mjs` calls nothing on fewer pairs.
+simulated HTTP/1.1 server (`--connections`, `--latency`), or from a real one
+with `--protocol h1|h2`. `--tune NAME=VALUE` pairs this tree against a copy
+with one constant changed, which is how the loading limits were swept. Use
+`--runs 8` or more: `compare.mjs` calls nothing on fewer pairs. A node of the
+fleet has only pushed commits, so `--against` there takes a pushed ref.
