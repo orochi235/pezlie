@@ -85,8 +85,8 @@ after each batch of commits.
 
 ## Next
 
-1. **Fling endpoint prefetch — built and tuned** (`745aeaa`..`a72eb2e`, unpushed
-   and unreleased). `Wall` predicts a fling's landing (`fling.ts`) and
+1. **Fling endpoint prefetch — built and tuned, released in 0.4.5**
+   (`745aeaa`..`a72eb2e`). `Wall` predicts a fling's landing (`fling.ts`) and
    `WallView` aims thumbnail fetches there; a grab now stops a fling; loose
    tiles load in view order, 24 at a time, or 96 once the first tile came over
    HTTP/2 or 3; only on-screen cells get loose tiles at the vector rung; 16
