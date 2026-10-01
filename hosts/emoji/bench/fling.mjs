@@ -42,8 +42,8 @@ const CONNECTIONS = Number(arg('connections') ?? 6);
 const OUT = arg('out');
 const VIEWPORT = { width: 1600, height: 1000 };
 const MARK = 'pezlie:complete';
-/** Screen pixels per pointer move: a flick of four moves ~10 ms apart. */
-const FLINGS = { short: 30, long: 100 };
+/** A flick's speed in screen px/ms: three moves 20 ms apart. */
+const FLINGS = { short: 3, long: 10 };
 const RUNGS = {
   loose: { url: /\/api\/thumbs\/emoji\/128\//, color: [255, 0, 255] },
   vector: { url: /\/api\/corpus\/render\/emoji\//, color: [0, 255, 255] },
@@ -167,13 +167,27 @@ async function run(browser, base, { rung, fling }) {
       window.__sampler = setInterval(sample, 25);
     }, RUNGS[rung].color);
     const asked0 = srv.log.length;
-    await page.mouse.move(cx, cy + 300);
-    await page.mouse.down();
-    for (let i = 1; i <= 4; i++) {
-      await page.mouse.move(cx, cy + 300 - i * FLINGS[fling]);
-      await page.waitForTimeout(10);
-    }
-    await page.mouse.up();
+    // Dispatched in the page at set times, not by Playwright: a fling's speed is
+    // read off when the page handles each move, and Playwright's spacing comes
+    // out different on every machine. Each move waits for a frame, so the wall
+    // draws between them as it would under a finger.
+    const pxPerMs = await page.evaluate(async ([x, y, speed]) => {
+      const canvas = document.querySelector('canvas.wall-canvas');
+      const fire = (type, at) => canvas.dispatchEvent(new PointerEvent(type, {
+        pointerId: 1, pointerType: 'mouse', isPrimary: true, button: 0, buttons: type === 'pointerup' ? 0 : 1,
+        clientX: x, clientY: at, bubbles: true }));
+      fire('pointerdown', y);
+      const times = [];
+      const t0 = performance.now();
+      for (let i = 1; i <= 3; i++) {
+        await new Promise(requestAnimationFrame);
+        while (performance.now() < t0 + i * 20) { /* to the exact time */ }
+        times.push(performance.now());
+        fire('pointermove', y - i * 20 * speed);
+      }
+      fire('pointerup', y - 60 * speed);
+      return (40 * speed) / (times[2] - times[0]);
+    }, [cx, cy + 300, FLINGS[fling]]);
     const releasedAt = performance.now();
     await waitUntil(() => srv.idleFor() > 800 && performance.now() - releasedAt > 3000, 120_000,
                     'the landing to fill in');
@@ -193,7 +207,7 @@ async function run(browser, base, { rung, fling }) {
       if (fill[i][0] <= release) continue;
       unfilled += Math.max(0, 1 - fill[i][1] / final) * (fill[i][0] - Math.max(release, fill[i - 1][0]));
     }
-    return { fillMs, unfilledMs: unfilled, served: srv.log.length - asked0 };
+    return { fillMs, unfilledMs: unfilled, served: srv.log.length - asked0, pxPerMs };
   } finally {
     await context.close();
   }
@@ -247,7 +261,7 @@ try {
   const results = sides.map(() => []);
   let step = 0;
   for (const c of CASES) {
-    const runs = sides.map(() => ({ fillMs: [], unfilledMs: [], served: [] }));
+    const runs = sides.map(() => ({ fillMs: [], unfilledMs: [], served: [], pxPerMs: [] }));
     for (let r = 0; r < RUNS; r++) {
       const turn = r % 2 ? [...sides.keys()].reverse() : [...sides.keys()];
       for (const side of turn) {
@@ -256,7 +270,7 @@ try {
         console.log(`${String(++step).padStart(3)}/${CASES.length * RUNS * sides.length}  `
           + `${`${c.rung}, ${c.fling} fling`.padEnd(20)} ${sides[side].label.padEnd(Math.max(...sides.map((x) => x.label.length)))} `
           + `filled ${got.fillMs.toFixed(0).padStart(5)} ms, unfilled ${got.unfilledMs.toFixed(0).padStart(5)} ms, `
-          + `${String(got.served).padStart(4)} served`);
+          + `${String(got.served).padStart(4)} served, flicked at ${got.pxPerMs.toFixed(1).padStart(4)} px/ms`);
       }
     }
     runs.forEach((rs, side) => {
