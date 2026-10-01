@@ -24,7 +24,7 @@ export const SETTLE_MS = 120;
 
 /** Rasters decoded at once; the whole screen at once starves the frame that
  *  would show the finished ones. */
-export const CONCURRENCY = 8;
+export const CONCURRENCY = 16;
 
 /** The raster size `wantedVector` budgets for when the caller names none. */
 export const VECTOR_TARGET_PX = 512;
