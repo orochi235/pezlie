@@ -1,4 +1,4 @@
-enlist: 2
+enlist: 3
 plugin: node
 # Every workspace's suite in turn; several vitest runs, so no runner line.
 run: npm test
