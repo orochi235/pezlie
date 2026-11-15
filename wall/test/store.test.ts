@@ -26,6 +26,20 @@ describe('storeFromItems', () => {
     expect(valuesOf(store, 'n')).toEqual([1, null, 1]);
   });
 
+  it('never codes a string like the list it spells, and codes maps by contents', () => {
+    interface Odd extends Item { v: unknown }
+    const odd = storeFromItems<Odd>([
+      { id: 'a', index: 0, sha: null, v: ['t'] },
+      { id: 'b', index: 1, sha: null, v: '\0["t"]' },
+      { id: 'c', index: 2, sha: null, v: { x: 1, y: 2 } },
+      { id: 'd', index: 3, sha: null, v: { y: 2, x: 1 } },
+    ]);
+    const { codes } = odd.column('v');
+    expect(codes[0]).not.toBe(codes[1]);
+    expect(codes[2]).toBe(codes[3]);
+    expect(valuesOf(odd, 'v')).toEqual([['t'], '\0["t"]', { x: 1, y: 2 }, { x: 1, y: 2 }]);
+  });
+
   it('keeps absent apart from null', () => {
     expect(valuesOf(store, 'extra')).toEqual(['ABSENT', 'ABSENT', true]);
     expect(valuesOf(store, 'nothing')).toEqual(['ABSENT', 'ABSENT', 'ABSENT']);
