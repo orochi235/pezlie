@@ -11,3 +11,14 @@ draw the old sheet's sprites over the new rows until the slot changes. Inferred 
 reproduced. A fix gives the corpus a generation or content hash that sheets, patches, and level
 requests carry, so a mismatched sheet is refused rather than drawn. (filed 2026-11-15 from automated
 review)
+
+## The wall's zoom-out stops at weasel's default 0.1, short of a million-cell fit
+
+`WallView` zooms with `zoomAt` (wheel, and pinch through `wall/src/pinch.ts`) and fits with
+`fitViewToBounds`, all without limits, so they take `@weasel-js/core`'s default 0.1–8. At cell 32 and
+gap 4, the 1,114,112-cell unicode wall is about 38,000 world units a side: fitting it to 1600×1000 wants a
+scale near 0.026, so at 0.1 the view holds about 11% of the cells, and `hosts/unicode/bench/browser.mjs`'s
+"whole wall" step (eight wheel-outs) measures that part, not the wall. Inferred from the source and
+arithmetic; not run. Closes when the wall passes a `min` derived from its fitted scale to every zoom path,
+and the bench asserts the whole wall is on screen. (filed 2026-11-19 from weasel's review of pezlie's
+scaling)
