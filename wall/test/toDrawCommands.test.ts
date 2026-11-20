@@ -35,11 +35,11 @@ it('maps a plain fill to a filled rect and a round one to an inset ellipse', () 
   const { commands, unsupported } = toDrawCommands([fill(), fill({ shape: 'circle' })], SHEET);
   expect(unsupported.size).toBe(0);
   expect(commands).toHaveLength(2);
-  expect(commands[0]).toMatchObject({ kind: 'path', fill: { color: '#aabbcc' } });
+  expect(commands[0]).toMatchObject({ kind: 'path', fill: { paint: { color: '#aabbcc' } } });
   const size = 40 * CIRCLE_SCALE;
   const inset = (40 - size) / 2;
   expect(commands[1]).toEqual({
-    kind: 'path', fill: { color: '#aabbcc' },
+    kind: 'path', fill: { paint: { color: '#aabbcc' } },
     path: ellipsePath({ x: inset, y: inset, width: size, height: size }),
   });
 });
@@ -48,19 +48,19 @@ it('maps a sprite to its ground and its tile, and washes in the passed color', (
   const plain = toDrawCommands([sprite()], SHEET, 'linear');
   expect(plain.unsupported.size).toBe(0);
   expect(plain.commands).toMatchObject([
-    { kind: 'path', fill: { color: '#eeeeee' } },
+    { kind: 'path', fill: { paint: { color: '#eeeeee' } } },
     { kind: 'image', image: SHEET, x: 10, y: 20, w: 60, h: 60,
       source: { x: 4, y: 8, w: 32, h: 32 }, sampling: 'linear' },
   ]);
   const washed = toDrawCommands([sprite({ wash: 0.5 })], SHEET, 'nearest', '#123456');
-  expect(washed.commands[2]).toMatchObject({ kind: 'path', fill: { color: '#123456', opacity: 0.5 } });
+  expect(washed.commands[2]).toMatchObject({ kind: 'path', fill: { paint: { color: '#123456', opacity: 0.5 } } });
 });
 
 it('maps a glyphed cell to its ground, as faint as draw2d draws it', async () => {
   const { glyphBlend } = await import('../src/paint');
   const { commands } = toDrawCommands([fill({ glyph: 'G', cover: 0.2 })], SHEET);
   expect(commands).toMatchObject([
-    { kind: 'path', fill: { color: '#aabbcc', opacity: glyphBlend(40, 0.2).ground } },
+    { kind: 'path', fill: { paint: { color: '#aabbcc', opacity: glyphBlend(40, 0.2).ground } } },
   ]);
 });
 

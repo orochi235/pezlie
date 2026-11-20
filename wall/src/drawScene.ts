@@ -137,6 +137,9 @@ export function scenePainter(gl: HTMLCanvasElement,
       const mapped = toDrawCommands(cmds, sheets.bitmap, sampling, options.washColor);
       unpainted = new Set([...mapped.unsupported].filter((f) => !RESIDUE_COVERS.has(f)));
 
+      // weasel sets the drawing buffer only; the element's size is the caller's.
+      gl.style.width = `${frame.width}px`;
+      gl.style.height = `${frame.height}px`;
       renderSceneToCanvas({
         canvas: gl,
         scene,

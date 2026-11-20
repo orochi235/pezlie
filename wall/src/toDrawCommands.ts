@@ -29,7 +29,7 @@ export interface Mapped {
 
 function fillRect(x: number, y: number, w: number, h: number,
                   color: string, opacity?: number): DrawCommand {
-  return { kind: 'path', path: rectPath(x, y, w, h), fill: { color, opacity } };
+  return { kind: 'path', path: rectPath(x, y, w, h), fill: { paint: { color, opacity } } };
 }
 
 /** Inset by half the width, the same correction `strokeBorder` makes. */
@@ -97,7 +97,7 @@ export function toDrawCommands(cmds: readonly PaintCommand[],
           kind: 'path',
           path: ellipsePath({ x: cmd.dx + (cmd.dw - iw) / 2, y: cmd.dy + (cmd.dh - ih) / 2,
                               width: iw, height: ih }),
-          fill: { color: cmd.fill },
+          fill: { paint: { color: cmd.fill } },
         });
       } else {
         out.push(fillRect(cmd.dx, cmd.dy, cmd.dw, cmd.dh, cmd.fill));

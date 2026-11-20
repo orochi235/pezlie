@@ -362,6 +362,7 @@ function WallViewBody<T extends Item>({
     const fitted = fitViewToBounds(
       { x: 0, y: 0, width: laid.bounds.w, height: laid.bounds.h },
       size, camRef.current ?? IDENTITY_VIEW, { mode: 'fill', padding: 0 });
+    if (!fitted) return;
     updateCam({ x: 0, y: 0, scale: fitted.scale });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [laid.bounds.w, laid.bounds.h, size.width, size.height]);
