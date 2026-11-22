@@ -9,17 +9,17 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@weasel-js/labkit": "1.19.1",
+    "@weasel-js/labkit": "2.0.0",
     "apache-arrow": "^21.2.0",
     "pezlie": "0.4.5",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.0",
+    "@vitejs/plugin-react": "^6.0.0",
     "playwright-core": "1.63.0",
     "typescript": "^5.6.0",
-    "vite": "^6.0.0",
+    "vite": "^8.0.0",
     "vitest": "^2.1.0"
   }
 }

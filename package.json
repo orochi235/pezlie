@@ -9,5 +9,8 @@
   "scripts": {
     "test": "npm test --workspaces",
     "typecheck": "npm run typecheck --workspaces"
+  },
+  "devDependencies": {
+    "vite": "^8.0.0"
   }
 }
