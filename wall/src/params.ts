@@ -1,4 +1,3 @@
-import type { ConfigField } from '@weasel-js/labkit';
 import type { Fill } from './layout';
 import { cssVarTable, kebabKey, paramKeys, type StateSpec } from './states';
 
@@ -38,7 +37,22 @@ export type ParamValue = string | number | boolean;
  *  `number`; the generated color keys are strings. */
 export type Params = FixedParams & Record<string, ParamValue>;
 
-export interface ParamGroup { label: string; fields: ConfigField[] }
+interface FieldBase<K extends string, V> { key: string; label: string; type: K; default: V }
+interface NumberField<K extends 'slider' | 'number'> extends FieldBase<K, number> {
+  min: number;
+  max: number;
+  step: number;
+}
+
+/** One tuning row: its key, its label and the control that edits it. */
+export type ParamField =
+  | NumberField<'slider'>
+  | NumberField<'number'>
+  | FieldBase<'checkbox', boolean>
+  | FieldBase<'color', string>
+  | (FieldBase<'select', string> & { options: { value: string; label: string }[] });
+
+export interface ParamGroup { label: string; fields: ParamField[] }
 
 export interface ParamSchema {
   defaults: Params;
@@ -47,7 +61,7 @@ export interface ParamSchema {
   colorKeys: string[];
   /** The unit a numeric row shows after its value. */
   units: Record<string, string>;
-  fields: ConfigField[];
+  fields: ParamField[];
   /** What the color rows were generated from, for `paramCssVars`. */
   states: readonly StateSpec[];
 }
@@ -132,7 +146,7 @@ export function paramSchema(states: readonly StateSpec[]): ParamSchema {
       { key: 'wash', label: 'Wash', type: 'checkbox', default: d.wash },
     ] },
     { label: 'Appearance', fields: [
-      ...colors.map((row): ConfigField =>
+      ...colors.map((row): ParamField =>
         ({ key: row.key, label: row.label, type: 'color', default: row.color })),
       { key: 'thickBorderFactor', label: 'Thick border factor', type: 'slider',
         default: d.thickBorderFactor, min: 0, max: 0.5, step: 0.01 },

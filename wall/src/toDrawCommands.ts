@@ -65,8 +65,8 @@ export function toDrawCommands(cmds: readonly PaintCommand[],
       const alpha = cmd.alpha ?? 1;
       const body: DrawCommand[] = [
         fillRect(cmd.dx, cmd.dy, cmd.dw, cmd.dh, cmd.ground),
-        { kind: 'image', image: sheet, x: cmd.dx, y: cmd.dy, w: cmd.dw, h: cmd.dh,
-          source: { x: cmd.sx, y: cmd.sy, w: cmd.sw, h: cmd.sh },
+        { kind: 'image', image: sheet, x: cmd.dx, y: cmd.dy, width: cmd.dw, height: cmd.dh,
+          source: { x: cmd.sx, y: cmd.sy, width: cmd.sw, height: cmd.sh },
           // Linear reaches half a texel past `source` and bleeds the
           // neighboring tile into the cell edge; nearest costs on a minified atlas.
           sampling },

@@ -6,7 +6,7 @@ import {
   zoomAt, type View,
 } from '@weasel-js/core';
 import { LabShell } from '@weasel-js/labkit';
-import { ToggleBar } from '@weasel-js/ui';
+import { SegmentedBar } from '@weasel-js/ui/components/Segmented';
 import { CacheFailureButton } from './CacheFailureButton';
 import { cacheReport } from './cacheReport';
 import { compileSpec, type CompiledSpec, type CompileError } from './cel';
@@ -645,11 +645,11 @@ function WallViewBody<T extends Item>({
                   )}
                   {typeof header === 'function'
                     ? header({ slots, slot, setSlot: chooseSlot, reveal, poll: fetched.poll }) : header}
-                  <ToggleBar mode="multiple" size="sm" variant="minimal" ariaLabel="Panels"
-                             className="wall-panels"
-                             items={[{ value: 'legend', label: 'Legend' }]}
-                             value={legendOpen ? ['legend'] : []}
-                             onChange={(v) => setLegendOpen(v.includes('legend'))} />
+                  <SegmentedBar mode="multiple" size="sm" variant="minimal" aria-label="Panels"
+                                className="wall-panels"
+                                items={[{ value: 'legend', label: 'Legend' }]}
+                                value={legendOpen ? ['legend'] : []}
+                                onChange={(v) => setLegendOpen(v.includes('legend'))} />
                   <CacheFailureButton
                     report={gatherCacheReport}
                     reset={() => { looseHandle.current?.reset(); vectorHandle.current?.reset(); }} />

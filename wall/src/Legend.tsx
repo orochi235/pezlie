@@ -1,5 +1,5 @@
 import { useMemo, type CSSProperties } from 'react';
-import { FloatingPanel } from '@weasel-js/labkit';
+import { PersistedFloatingPanel } from '@weasel-js/labkit';
 import { BadgeSwatch } from './BadgeSwatch';
 import type { CompiledSpec } from './cel';
 import { countStates, countTags, type Facts } from './derive';
@@ -75,7 +75,7 @@ export function Legend<T extends Item>({
   };
 
   return (
-    <FloatingPanel anchor="top-right" persist={storageKey} className="wall-legend">
+    <PersistedFloatingPanel anchor="top-right" persist={storageKey} className="wall-legend">
       <div className="wall-legend-head">
         <strong>Legend</strong>
         <button type="button" aria-label="Close legend" onClick={onClose}>x</button>
@@ -152,6 +152,6 @@ export function Legend<T extends Item>({
           </ul>
         </section>
       ))}
-    </FloatingPanel>
+    </PersistedFloatingPanel>
   );
 }

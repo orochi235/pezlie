@@ -49,8 +49,8 @@ it('maps a sprite to its ground and its tile, and washes in the passed color', (
   expect(plain.unsupported.size).toBe(0);
   expect(plain.commands).toMatchObject([
     { kind: 'path', fill: { paint: { color: '#eeeeee' } } },
-    { kind: 'image', image: SHEET, x: 10, y: 20, w: 60, h: 60,
-      source: { x: 4, y: 8, w: 32, h: 32 }, sampling: 'linear' },
+    { kind: 'image', image: SHEET, x: 10, y: 20, width: 60, height: 60,
+      source: { x: 4, y: 8, width: 32, height: 32 }, sampling: 'linear' },
   ]);
   const washed = toDrawCommands([sprite({ wash: 0.5 })], SHEET, 'nearest', '#123456');
   expect(washed.commands[2]).toMatchObject({ kind: 'path', fill: { paint: { color: '#123456', opacity: 0.5 } } });

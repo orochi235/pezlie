@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
-import { ControlPanel, fromConfigFields } from '@weasel-js/labkit';
-import type { ParamSchema, Params } from './params';
+import { ControlPanel, f, resolveConfigSchema, type ConfigEntry } from '@weasel-js/labkit';
+import type { ParamField, ParamSchema, Params } from './params';
 import './ParamsPanel.css';
 
 export interface ParamsPanelProps {
@@ -10,17 +10,27 @@ export interface ParamsPanelProps {
   reset: () => void;
 }
 
+function paramNode(field: ParamField, unit: string | undefined): ConfigEntry {
+  switch (field.type) {
+    case 'slider':
+    case 'number': {
+      const node = f.number(field.default).range(field.min, field.max).step(field.step)
+        .label(field.label);
+      const control = field.type === 'slider' ? node.slider() : node.input();
+      return unit === undefined ? control : control.suffix(unit);
+    }
+    case 'checkbox': return f.boolean(field.default).label(field.label);
+    case 'color': return f.color(field.default).label(field.label);
+    case 'select': return f.enum(field.default, field.options).label(field.label);
+  }
+}
+
 /** The wall's tuning constants, inline in the sidebar beside the filters. */
 export function ParamsPanel({ schema, params, setParam, reset }: ParamsPanelProps) {
-  // Resolved rather than handed over as `fields`: only the resolved shape
-  // carries a unit, which the row draws as `suffix`.
   const schemas = useMemo(() => schema.groups.map((group) => {
-    const resolved = fromConfigFields(group.fields);
-    for (const [key, unit] of Object.entries(schema.units)) {
-      const leaf = resolved.group.children[key] as { suffix?: string } | undefined;
-      if (leaf) leaf.suffix = unit;
-    }
-    return { label: group.label, resolved };
+    const nodes = Object.fromEntries(group.fields.map((field) =>
+      [field.key, paramNode(field, schema.units[field.key])]));
+    return { label: group.label, resolved: resolveConfigSchema(f.schema(nodes)) };
   }), [schema]);
 
   return (

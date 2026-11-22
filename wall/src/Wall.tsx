@@ -5,7 +5,7 @@ import {
 import {
   clientToCanvas, screenToWorld, viewToTransform, worldToScreen, useDecayLoop,
   viewportDragPanAction, zoomAt, WeaselProvider,
-  type DecayLoopConfig, type InvocationCtx, type OngoingHandle, type View,
+  type DecayLoopOptions, type InvocationCtx, type OngoingHandle, type View,
 } from '@weasel-js/core';
 import { LoupeBubble, LoupeGestures, resolveLoupe, useLoupe } from '@weasel-js/labkit/loupe';
 import { adjacent, impliedCaret, type Direction } from './caret';
@@ -163,7 +163,7 @@ export function Wall<T extends Item>({
   const dragPointerRef = useRef<number | null>(null);
   const pinchAtRef = useRef<{ x: number; y: number } | null>(null);
 
-  const fling = (config: DecayLoopConfig) => {
+  const fling = (config: DecayLoopOptions) => {
     onFling?.(landing(camRef.current, config));
     decay.start({ ...config, onEnd: () => { config.onEnd?.(); onFling?.(null); } });
   };
