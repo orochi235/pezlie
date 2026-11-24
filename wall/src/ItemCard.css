@@ -46,7 +46,7 @@
   pointer-events: none;
   display: grid;
   grid-template-columns: var(--card-pad) var(--open-w) 1fr;
-  grid-template-rows: var(--card-pad) var(--open-h) var(--card-pad);
+  grid-template-rows: var(--pad-above, var(--card-pad)) var(--open-h) var(--pad-below, var(--card-pad));
 }
 
 .wall-card--framed > .wall-card__pane,
@@ -59,15 +59,20 @@
 .wall-card__pane--side { grid-area: 2 / 1 / 3 / 2; }
 .wall-card__opening { grid-area: 2 / 2 / 3 / 3; }
 
-/* The full height of the frame, opening and both pads. */
+/* The full height of the frame, opening and both pads. The frame grows to
+ * hold the body, so it scrolls only in a viewport too short for it. */
 .wall-card__details {
   grid-area: 1 / 3 / 4 / 4;
   box-sizing: border-box;
   padding: var(--card-pad);
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+.wall-card__body {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  overflow: auto;
 }
 
 .wall-card--left .wall-card__pane--top { grid-area: 1 / 2 / 2 / 4; }

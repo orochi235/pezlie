@@ -132,6 +132,22 @@ it('keeps the details right when neither side has room, rather than sliding off 
   expect(frameCard({ ...CELL, x: 100 }, { width: 400, height: 800 }).side).toBe('right');
 });
 
+it('grows the frame down to hold details taller than the cell', () => {
+  const frame = frameCard(CELL, VIEWPORT, CELL.h + 100);
+  expect(frame).toMatchObject({ y: CELL.y - CARD_PAD, above: CARD_PAD, below: CARD_PAD + 100,
+                                height: CELL.h + 2 * CARD_PAD + 100 });
+  expect(frame.opening.y).toBe(CELL.y);
+});
+
+it('grows the frame up once the viewport has no room below', () => {
+  // 40px of room under the frame's bottom pad; the other 60 go above.
+  const viewport = { width: VIEWPORT.width,
+                     height: CELL.y + CELL.h + CARD_PAD + 40 + CARD_MARGIN };
+  const frame = frameCard(CELL, viewport, CELL.h + 100);
+  expect(frame).toMatchObject({ above: CARD_PAD + 60, below: CARD_PAD + 40,
+                                y: CELL.y - CARD_PAD - 60 });
+});
+
 const framed = ({ cell = CELL, viewport = VIEWPORT, onClose = () => {}, children,
                   ...rest }: Extra & { cell?: typeof CELL } = {}) => (
   <ItemCard cell={cell} viewport={viewport} onClose={onClose} {...rest}>
